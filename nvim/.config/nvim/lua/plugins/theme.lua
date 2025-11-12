@@ -1,0 +1,1 @@
+/home/sushii/.config/omarchy/current/theme/neovim.lua
