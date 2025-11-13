@@ -2,15 +2,20 @@
 /* This overrides the Omarchy default theme */
 @import "file:///home/sushii/.local/share/omarchy/default/walker/themes/omarchy-default/style.css";
 
-/* Add rounded corners to all main containers */
+/* Add rounded corners to main container */
 .box-wrapper {
   border-radius: 10px !important;
 }
 
+/* Hide keybind hints (tooltips in bottom right) */
 .keybind-hints {
-  border-radius: 10px !important;
+  opacity: 0;
+  min-height: 0px;
+  margin: 0px;
+  padding: 0px;
 }
 
+/* Add rounded corners to preview if visible */
 .preview {
   border-radius: 10px !important;
 }
