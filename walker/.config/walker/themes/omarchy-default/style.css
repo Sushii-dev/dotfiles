@@ -1,26 +1,16 @@
 /* Start from Omarchy's default Walker theme */
-/* Relative path from ~/.config/walker/themes/omarchy-default/ to ~/.local/share/omarchy/ */
 @import "../../../../.local/share/omarchy/default/walker/themes/omarchy-default/style.css";
 
-/* Override box-wrapper: add rounded corners, constrain width, center */
-window .box-wrapper {
+/* Add rounded corners and constrain width */
+.box-wrapper {
   border-radius: 12px;
+  background-clip: padding-box;
   max-width: 750px;
   margin-left: auto;
   margin-right: auto;
 }
 
-/* Also target #box directly for rounding */
-window #box {
-  border-radius: 12px;
-}
-
-/* Hide keybind hints (key input tooltips in bottom right) */
+/* Hide keybind hints (legend in bottom right) */
 .keybind-hints {
-  display: none !important;
-  opacity: 0;
-  min-height: 0;
-  padding: 0;
-  margin: 0;
+  display: none;
 }
-
