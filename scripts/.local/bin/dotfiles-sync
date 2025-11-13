@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -e
+
+cd "$HOME/dotfiles"
+
+case "$1" in
+  pull)
+    echo "[dotfiles] Pulling from origin/main..."
+    git pull --ff-only
+    ;;
+  push)
+    echo "[dotfiles] Status before push:"
+    git status
+    echo
+    echo "Press Enter to commit and push all changes, or Ctrl+c to cancel."
+    read -r
+
+    git add .
+    git commit -m "sync $(hostname) $(date +%F-%H%M%S)" || {
+      echo "[dotfiles] Nothing to commit."
+      exit 0
+    }
+    git push
+    ;;
+  *)
+    echo "Usage: dotfiles-sync pull|push"
+    exit 1
+    ;;
+esac
