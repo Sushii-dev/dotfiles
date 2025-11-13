@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -e
+
+SRC="$HOME/dotfiles/hypr/.config/hypr"
+DST="$HOME/.config/hypr"
+BACKUP="$HOME/.config/hypr_backup_$(date +%F-%H%M%S)"
+
+if [ ! -d "$SRC" ]; then
+  echo "[hypr-sync] ERROR: $SRC does not exist."
+  exit 1
+fi
+
+echo "[hypr-sync] Backing up existing Hypr config (if any) to: $BACKUP"
+if [ -d "$DST" ]; then
+  mv "$DST" "$BACKUP"
+fi
+
+echo "[hypr-sync] Copying repo Hypr config to: $DST"
+cp -r "$SRC" "$DST"
+
+echo "[hypr-sync] Done. You can now run: hyprctl reload"
