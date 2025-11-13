@@ -18,4 +18,16 @@ fi
 echo "[hypr-sync] Copying repo Hypr config to: $DST"
 cp -r "$SRC" "$DST"
 
-echo "[hypr-sync] Done. You can now run: hyprctl reload"
+echo "[hypr-sync] Done."
+
+# Try to reload Hyprland, but do not crash if it is not running
+if command -v hyprctl >/dev/null 2>&1; then
+  echo "[hypr-sync] Trying to reload Hyprland..."
+  if hyprctl reload; then
+    echo "[hypr-sync] Hyprland reloaded."
+  else
+    echo "[hypr-sync] hyprctl reload failed, maybe this is not a Hyprland session."
+  fi
+else
+  echo "[hypr-sync] hyprctl not found, please reload Hyprland manually if needed."
+fi
