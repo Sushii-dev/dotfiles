@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -e
+
+cd "$HOME/dotfiles"
+
+if [ "$1" = "install" ]; then
+  echo "[pkgs] Syncing pacman packages..."
+  sudo pacman -Syu --needed - < pkglist_pacman.txt
+
+  if command -v paru >/dev/null 2>&1 && [ -f pkglist_aur.txt ]; then
+    echo "[pkgs] Syncing AUR packages..."
+    paru -S --needed - < pkglist_aur.txt
+  fi
+
+  echo "[pkgs] Done."
+else
+  echo "Usage: omarchy-sync-pkgs install"
+  exit 1
+fi
