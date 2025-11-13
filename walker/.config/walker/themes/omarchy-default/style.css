@@ -2,10 +2,21 @@
 /* Relative path from ~/.config/walker/themes/omarchy-default/ to ~/.local/share/omarchy/ */
 @import "../../../../.local/share/omarchy/default/walker/themes/omarchy-default/style.css";
 
-/* Add your rounding */
+/* Add rounded corners */
 #box,
 .box-wrapper {
   border-radius: 12px;
   background-clip: padding-box;
+}
+
+/* Cap width and center Walker on screen */
+.box-wrapper {
+  max-width: 800px;      /* adjust 700-900 to taste */
+  margin: 0 auto;        /* center horizontally */
+}
+
+/* Hide keybind hints (key input tooltips in bottom right) */
+.keybind-hints {
+  display: none;
 }
 
