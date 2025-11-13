@@ -1,0 +1,15 @@
+/* Start from Omarchy's base Walker styles */
+@import url("file://~/.local/share/omarchy/default/walker/themes/omarchy-default/style.css");
+
+/* Also pull in the current Omarchy theme's walker.css (colors etc) */
+@import url("file://~/.config/omarchy/current/theme/walker.css");
+
+/* Now your overrides */
+
+/* This is the important part for rounding the launcher and menus */
+#box,
+.box-wrapper {
+  border-radius: 12px;  /* tweak the radius to taste */
+  background-clip: padding-box;
+}
+
