@@ -1,6 +1,6 @@
 /* Custom walker theme with rounded corners */
 /* This overrides the Omarchy default theme */
-@import "../../../../../../../.local/share/omarchy/default/walker/themes/omarchy-default/style.css";
+@import "file:///home/sushii/.local/share/omarchy/default/walker/themes/omarchy-default/style.css";
 
 /* Add rounded corners to all main containers */
 .box-wrapper {
