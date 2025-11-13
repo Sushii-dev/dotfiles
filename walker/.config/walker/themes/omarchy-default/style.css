@@ -2,21 +2,22 @@
 /* Relative path from ~/.config/walker/themes/omarchy-default/ to ~/.local/share/omarchy/ */
 @import "../../../../.local/share/omarchy/default/walker/themes/omarchy-default/style.css";
 
-/* Add rounded corners */
-#box,
-.box-wrapper {
+/* Add rounded corners to box */
+#box {
   border-radius: 12px;
   background-clip: padding-box;
 }
 
-/* Cap width and center Walker on screen */
+/* Style box-wrapper: rounded corners, constrain width, center */
 .box-wrapper {
-  max-width: 800px;      /* adjust 700-900 to taste */
-  margin: 0 auto;        /* center horizontally */
+  border-radius: 12px !important;
+  background-clip: padding-box !important;
+  max-width: 800px !important;
+  margin: 0 auto !important;
 }
 
 /* Hide keybind hints (key input tooltips in bottom right) */
 .keybind-hints {
-  display: none;
+  display: none !important;
 }
 
