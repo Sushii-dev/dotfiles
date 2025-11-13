@@ -1,0 +1,34 @@
+# Do not let Cursor attempt to modify wallpaper images
+wallpapers/**/*.png
+wallpapers/**/*.jpg
+wallpapers/**/*.jpeg
+
+# Ignore all large binary assets
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+
+# Ignore compiled or cache-like folders
+**/.cache/**
+**/.local/state/**
+**/.local/share/**
+
+# Ignore package list files unless explicitly opened
+pkglist_pacman.txt
+pkglist_aur.txt
+
+# Ignore binary files in scripts (none expected)
+scripts/**/*.png
+scripts/**/*.exe
+
+# Ignore symlinked theme assets inside omarchy
+omarchy/.config/omarchy/current/
+
+# Ignore README, LICENSE in nvim (stable, rarely edited)
+nvim/.config/nvim/LICENSE
+nvim/.config/nvim/README.md
+
+# Ignore git internals
+.git/**
