@@ -1,33 +1,45 @@
 #!/usr/bin/env bash
 set -e
 
-SRC="$HOME/dotfiles/hypr/.config/hypr"
-DST="$HOME/.config/hypr"
-BACKUP="$HOME/.config/hypr_backup_$(date +%F-%H%M%S)"
+REPO="$HOME/dotfiles/hypr/.config/hypr"
+TARGET="$HOME/.config/hypr"
+BACKUP="$HOME/.config/hypr_backup_$(date +%Y-%m-%d-%H%M%S)"
+TEMP="/tmp/hypr_local_preserve"
 
-if [ ! -d "$SRC" ]; then
-  echo "[hypr-sync] ERROR: $SRC does not exist."
+if [ ! -d "$REPO" ]; then
+  echo "[hypr-sync] ERROR: $REPO does not exist."
   exit 1
 fi
 
-echo "[hypr-sync] Backing up existing Hypr config (if any) to: $BACKUP"
-if [ -d "$DST" ]; then
-  mv "$DST" "$BACKUP"
+echo "[hypr-sync] Backing up existing Hypr config to: $BACKUP"
+if [ -d "$TARGET" ]; then
+  cp -r "$TARGET" "$BACKUP"
 fi
 
-echo "[hypr-sync] Copying repo Hypr config to: $DST"
-cp -r "$SRC" "$DST"
+# Preserve local-only files
+echo "[hypr-sync] Preserving local-only configs..."
+mkdir -p "$TEMP"
+if [ -f "$TARGET/monitors.conf" ]; then
+  cp "$TARGET/monitors.conf" "$TEMP/monitors.conf"
+  echo "  - preserved monitors.conf"
+fi
+
+echo "[hypr-sync] Copying repo Hypr config to: $TARGET"
+mkdir -p "$TARGET"
+cp -r "$REPO"/* "$TARGET/"
+
+# Restore local-only files
+echo "[hypr-sync] Restoring local-only configs..."
+if [ -f "$TEMP/monitors.conf" ]; then
+  cp "$TEMP/monitors.conf" "$TARGET/monitors.conf"
+  echo "  - restored monitors.conf"
+fi
+rm -rf "$TEMP"
 
 echo "[hypr-sync] Done."
-
-# Try to reload Hyprland, but do not crash if it is not running
-if command -v hyprctl >/dev/null 2>&1; then
-  echo "[hypr-sync] Trying to reload Hyprland..."
-  if hyprctl reload; then
-    echo "[hypr-sync] Hyprland reloaded."
-  else
-    echo "[hypr-sync] hyprctl reload failed, maybe this is not a Hyprland session."
-  fi
+echo "[hypr-sync] Trying to reload Hyprland..."
+if hyprctl reload 2>/dev/null; then
+  echo "[hypr-sync] Hyprland reloaded."
 else
-  echo "[hypr-sync] hyprctl not found, please reload Hyprland manually if needed."
+  echo "[hypr-sync] Could not reload (not running or error)."
 fi

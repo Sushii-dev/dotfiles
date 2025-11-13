@@ -41,15 +41,45 @@ cd dotfiles
 
 The system is now ready and synced.
 
+### 4. Configure monitors (required on first run)  
+Each machine needs its own monitor configuration:
+
+```bash
+# Find your monitors
+hyprctl monitors
+
+# Create your config from template
+cd ~/dotfiles/hypr/.config/hypr
+cp monitors.conf.template ~/.config/hypr/monitors.conf
+
+# Edit with your monitor setup
+nano ~/.config/hypr/monitors.conf
+
+# Apply changes
+hyprctl reload
+```
+
+**Note**: `monitors.conf` is local-only and never synced between machines.
+
 ## Sync workflow between devices  
 This gives you a clean loop so both devices stay identical.
+
+### What syncs  
+• All appearance configs (waybar, themes, rounded corners, blur)  
+• Keybindings and shortcuts  
+• Application configs (terminal, nvim, etc.)  
+• Scripts and automation
+
+### What stays local (per-machine)  
+• Monitor configurations (~/.config/hypr/monitors.conf)  
+• Hardware-specific settings
 
 ### From the device where you make changes  
 dotfiles-sync push
 
 ### On the other device  
 dotfiles-sync pull
-omarchy-sync-hypr
+omarchy-sync-hypr  # Preserves your local monitors.conf
 
 ## Manual Hyprland reload  
 hyprctl reload

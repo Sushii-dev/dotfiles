@@ -1,29 +1,34 @@
 @import "../omarchy/current/theme/waybar.css";
 
 * {
-  background-color: @background;
+  background-color: transparent;
   color: @foreground;
 
   border: none;
   border-radius: 0;
   min-height: 0;
   font-family: 'CaskaydiaMono Nerd Font';
-  font-size: 12px;
+  font-size: 16px;
+}
+
+window#waybar {
+  background-color: rgba(0, 0, 0, 0.5);
+  border-radius: 14px;
 }
 
 .modules-left {
-  margin-left: 8px;
+  margin-left: 13px;
 }
 
 .modules-right {
-  margin-right: 8px;
+  margin-right: 13px;
 }
 
 #workspaces button {
   all: initial;
-  padding: 0 6px;
-  margin: 0 1.5px;
-  min-width: 9px;
+  padding: 0 10px;
+  margin: 0 2.5px;
+  min-width: 14px;
 }
 
 #workspaces button.empty {
@@ -31,41 +36,76 @@
 }
 
 #cpu,
+#memory,
+#custom-gpu,
 #battery,
 #pulseaudio,
 #custom-omarchy,
 #custom-screenrecording-indicator,
 #custom-update {
-  min-width: 12px;
-  margin: 0 7.5px;
+  min-width: 19px;
+  margin: 0 12px;
 }
 
+/* CPU styling - Blue theme */
+#cpu {
+  color: #7aa2f7;
+}
+
+#cpu.warning {
+  color: #e0af68;
+}
+
+#cpu.critical {
+  color: #f7768e;
+}
+
+/* Memory styling - Purple theme */
+#memory {
+  color: #bb9af7;
+}
+
+#memory.warning {
+  color: #e0af68;
+}
+
+#memory.critical {
+  color: #f7768e;
+}
+
+/* GPU styling - Green theme */
+#custom-gpu {
+  color: #9ece6a;
+}
+
+
 #tray {
-  margin-right: 16px;
+  margin-right: 12px;
 }
 
 #bluetooth {
-  margin-right: 17px;
+  margin-right: 27px;
 }
 
 #network {
-  margin-right: 13px;
+  margin-right: 21px;
 }
 
 #custom-expand-icon {
-  margin-right: 20px;
+  margin-right: 12px;
 }
 
 tooltip {
-  padding: 2px;
+  padding: 3px;
 }
 
 #custom-update {
-  font-size: 10px;
+  font-size: 14px;
 }
 
 #clock {
-  margin-left: 8.75px;
+  margin: 0 20px;
+  min-width: 100px;
 }
 
 .hidden {
@@ -73,11 +113,29 @@ tooltip {
 }
 
 #custom-screenrecording-indicator {
-  min-width: 12px;
-  margin-left: 8.75px;
-  font-size: 10px;
+  min-width: 19px;
+  margin-left: 14px;
+  font-size: 14px;
 }
 
 #custom-screenrecording-indicator.active {
   color: #a55555;
+}
+
+/* Cava audio visualizer */
+#custom-cava {
+  font-family: monospace;
+  font-size: 20px;
+  letter-spacing: -2px;
+  color: #7aa2f7;
+  min-width: 350px;
+  margin: 0 20px;
+}
+
+#custom-cava.muted {
+  color: #f7768e;
+}
+
+#custom-cava.error {
+  color: #e0af68;
 }

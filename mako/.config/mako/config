@@ -1,0 +1,11 @@
+# Import Omarchy theme settings
+include=~/.local/share/omarchy/default/mako/core.ini
+
+# Override with rounded corners (stored in dotfiles repo)
+border-radius=10
+
+# Keep theme colors from Omarchy
+text-color=#c0caf5
+border-color=#33ccff
+background-color=#1a1b26
+
