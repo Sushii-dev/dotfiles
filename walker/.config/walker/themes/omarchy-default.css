@@ -1,0 +1,11 @@
+@import url("file://~/.local/share/omarchy/default/walker/themes/omarchy-default.css");
+@import url("file://~/.config/omarchy/current/theme/walker.css");
+
+#box {
+  border-radius: 12px;
+  background-clip: padding-box;
+  max-width: 850px;
+  margin-left: auto;
+  margin-right: auto;
+}
+

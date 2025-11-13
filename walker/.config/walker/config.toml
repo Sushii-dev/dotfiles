@@ -1,7 +1,9 @@
 force_keyboard_focus = true                                                 # forces keyboard forcus to stay in Walker
 selection_wrap = true                                                       # wrap list if at bottom or top
 theme = "omarchy-default"                                                   # use Omarchy's default theme
-additional_theme_location = "./themes/"                                     # load user overrides from ~/.config/walker/themes/
+theme_base = []
+theme_location = ["~/.local/share/omarchy/default/walker/themes/"]
+hotreload_theme = true
 
 [placeholders]
 "default" = { input = " Search...", list = "No Results" } # placeholders for input and empty list, key is the providers name, so f.e. "desktopapplications" or "menus:other"
