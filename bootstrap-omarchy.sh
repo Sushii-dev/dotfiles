@@ -96,25 +96,4 @@ else
 fi
 
 echo "[bootstrap] Done."
-
-# Check if monitors.conf exists, if not, provide guidance
-if [ ! -f "$HOME/.config/hypr/monitors.conf" ]; then
-  echo ""
-  echo "[bootstrap] ⚠️  IMPORTANT: Monitor configuration needed!"
-  echo "            Your monitors.conf is not set up yet."
-  echo ""
-  echo "            1. Find your monitors:"
-  echo "               hyprctl monitors"
-  echo ""
-  echo "            2. Edit monitor config:"
-  echo "               nano ~/.config/hypr/monitors.conf"
-  echo ""
-  echo "            3. Example for single monitor:"
-  echo "               monitor=,preferred,auto,1"
-  echo ""
-  echo "            4. Reload Hyprland:"
-  echo "               hyprctl reload"
-  echo ""
-fi
-
 echo "[bootstrap] If anything feels off, your old configs are in: $BACKUP_DIR"
