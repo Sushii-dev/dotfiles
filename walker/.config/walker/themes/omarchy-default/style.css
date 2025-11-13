@@ -1,16 +1,20 @@
-/* Start from Omarchy's default Walker theme */
+/* 1. Import Omarchy's Walker theme with correct path */
 @import "../../../../.local/share/omarchy/default/walker/themes/omarchy-default/style.css";
 
-/* Add rounded corners and constrain width */
+/* 2. Round the main Walker box */
 .box-wrapper {
   border-radius: 12px;
   background-clip: padding-box;
-  max-width: 750px;
-  margin-left: auto;
-  margin-right: auto;
 }
 
-/* Hide keybind hints (legend in bottom right) */
+/* 3. Hide the keybind hints / tooltips at the bottom */
 .keybind-hints {
-  display: none;
+  /* remove them visually and from layout */
+  padding: 0;
+  margin: 0;
+  min-height: 0;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: transparent;
 }
