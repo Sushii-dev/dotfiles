@@ -95,5 +95,13 @@ else
   echo "[bootstrap] No hypr/.config/hypr directory in repo, skipping Hypr sync."
 fi
 
+echo "[bootstrap] Installing Posy's Improved Cursor (Black)..."
+if command -v install-posy-cursor &>/dev/null; then
+  install-posy-cursor
+else
+  echo "[bootstrap] WARNING: install-posy-cursor not in PATH yet."
+  echo "            After login, run: install-posy-cursor"
+fi
+
 echo "[bootstrap] Done."
 echo "[bootstrap] If anything feels off, your old configs are in: $BACKUP_DIR"
