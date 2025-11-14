@@ -1,81 +1,103 @@
 # Dotfiles for Omarchy  
 A clean and safe setup for syncing ricing, Hyprland config, terminal styling, and app themes between devices.
 
-## SSH Setup  
-You need SSH keys so your devices can pull and push from your GitHub repo.
+## 🚀 Quick Install (One-Liner)
 
-### 1. Create a new SSH key  
+On a fresh Omarchy install, run this single command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Sushii-dev/dotfiles/main/install.sh | bash
+```
+
+**That's it!** ✨ The script will:
+- Clone this repo to `~/dotfiles`
+- Backup any existing configs to `~/.config_backup_omarchy`
+- Apply all rice settings using GNU Stow
+- Sync Hyprland configs (if available)
+
+Your system will be identical to mine in seconds.
+
+---
+
+## 🔄 Keeping Configs in Sync
+
+Once installed, use these commands to stay up-to-date:
+
+```bash
+# Pull latest changes from this repo
+cd ~/dotfiles && git pull && ./bootstrap-omarchy.sh
+
+# Or use the included sync script
+dotfiles-sync pull
+
+# Sync Hyprland config specifically
+omarchy-sync-hypr
+
+# Reload Hyprland manually
+hyprctl reload
+```
+
+---
+
+## 🛠️ For Contributors / Pushing Changes
+
+If you want to **push your own config changes** back to your fork or make modifications:
+
+### 1. Set up SSH keys
+
+```bash
+# Generate a new SSH key
 ssh-keygen -t ed25519 -C "your_email@example.com"
 
-Press Enter for all prompts.
-
-### 2. Add the key to the SSH agent  
+# Add to SSH agent
 eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/id_ed25519
 
-### 3. Copy the public key to your clipboard  
+# Copy public key
 cat ~/.ssh/id_ed25519.pub
+```
 
-Copy the entire line.
+### 2. Add key to GitHub
+1. Go to [GitHub SSH Settings](https://github.com/settings/keys)
+2. Click "New SSH key"
+3. Paste your public key and save
 
-### 4. Add the key to GitHub  
-Open GitHub  
-Go to Settings  
-Go to SSH and GPG keys  
-Select New SSH key  
-Paste the key and save it
+### 3. Change remote to SSH
 
-## First time setup on a fresh Omarchy install  
-Run these commands on a new machine.
+```bash
+cd ~/dotfiles
+git remote set-url origin git@github.com:Sushii-dev/dotfiles.git
+```
 
-### 1. Install dependencies  
-Omarchy already includes stow and git so you do not need extra tools.
+Now you can push changes:
 
-### 2. Clone the repo with SSH  
-cd ~
-git clone git@github.com:YOUR_USERNAME/dotfiles.git
-cd dotfiles
-
-### 3. Run the bootstrap  
-./bootstrap-omarchy.sh
-
-The system is now ready and synced.
-
-## Sync workflow between devices  
-This gives you a clean loop so both devices stay identical.
-
-### From the device where you make changes  
+```bash
 dotfiles-sync push
+```
 
-### On the other device  
-dotfiles-sync pull
-omarchy-sync-hypr
+---
 
-## Manual Hyprland reload  
-hyprctl reload
+## 📦 What's Included
 
-## Structure of this repo  
-Only user configs are included.  
-Omarchy system directories are not synced and are ignored for safety.
+This repo contains **user configs only**. Omarchy system directories are not synced for safety.
 
-Included  
-• Hyprland user configs  
-• Neovim  
-• Waybar  
-• Kitty and Alacritty  
-• Ghostty  
-• Systemd user units  
-• Fonts  
-• Fastfetch  
-• All scripts in the scripts folder  
-• Starship prompt  
-• Walker  
-• Btop  
-• Mimeapps  
-• Many others
+### ✅ Included
+- 🎨 Hyprland user configs
+- ⚙️ Neovim
+- 📊 Waybar
+- 🖥️ Terminal configs (Kitty, Alacritty, Ghostty)
+- 🔧 Systemd user units
+- 🔤 Fonts & fontconfig
+- 📸 Fastfetch
+- 🚀 Starship prompt
+- 🔍 Walker launcher
+- 📈 Btop
+- 📄 Mimeapps
+- 🛠️ Custom scripts (`~/.local/bin`)
+- And many more...
 
-Not included  
-• Omarchy system config  
-• Any file inside .local/share/omarchy  
-• Any file inside .config/omarchy  
-• Hardware specific monitor config files such as monitors.conf and monitors_desktop.conf
+### ❌ Not Included
+- Omarchy system config
+- `.local/share/omarchy/`
+- `.config/omarchy/`
+- Hardware-specific monitor configs (`monitors.conf`, `monitors_desktop.conf`)
