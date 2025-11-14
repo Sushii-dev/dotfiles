@@ -1,4 +1,5 @@
 @import "../omarchy/current/theme/waybar.css";
+@import "../omarchy/current/theme/walker.css";
 
 * {
   background-color: transparent;
@@ -47,35 +48,37 @@ window#waybar {
   margin: 0 12px;
 }
 
-/* CPU styling - Blue theme */
+/* CPU styling - Uses theme's selected-text color */
 #cpu {
-  color: #7aa2f7;
+  color: @selected-text;
 }
 
 #cpu.warning {
-  color: #e0af68;
+  color: @border;
 }
 
 #cpu.critical {
-  color: #f7768e;
+  color: @foreground;
+  font-weight: bold;
 }
 
-/* Memory styling - Purple theme */
+/* Memory styling - Uses theme's border color */
 #memory {
-  color: #bb9af7;
+  color: @border;
 }
 
 #memory.warning {
-  color: #e0af68;
+  color: @selected-text;
 }
 
 #memory.critical {
-  color: #f7768e;
+  color: @foreground;
+  font-weight: bold;
 }
 
-/* GPU styling - Green theme */
+/* GPU styling - Uses theme's text color */
 #custom-gpu {
-  color: #9ece6a;
+  color: @text;
 }
 
 
@@ -119,23 +122,24 @@ tooltip {
 }
 
 #custom-screenrecording-indicator.active {
-  color: #a55555;
+  color: @selected-text;
 }
 
-/* Cava audio visualizer */
+/* Cava audio visualizer - theme-aware */
 #custom-cava {
   font-family: monospace;
   font-size: 20px;
   letter-spacing: -2px;
-  color: #7aa2f7;
+  color: @selected-text;
   min-width: 350px;
   margin: 0 20px;
 }
 
 #custom-cava.muted {
-  color: #f7768e;
+  color: @foreground;
+  opacity: 0.5;
 }
 
 #custom-cava.error {
-  color: #e0af68;
+  color: @border;
 }
