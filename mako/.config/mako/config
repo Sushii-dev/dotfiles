@@ -7,6 +7,13 @@ include=~/.config/omarchy/current/theme/mako.ini
 # Override with rounded corners to match Hyprland (12px)
 border-radius=12
 
-# Proper opacity (no weird transparency box)
-background-color=#2c2525ee
+# Eliminate margins to reduce blur effect
+outer-margin=0
+margin=0
+
+# Make background fully opaque (no transparency)
+background-color=#2c2525ff
+
+# Thin border to define edges
+border-size=2
 
