@@ -2,6 +2,7 @@ force_keyboard_focus = true                                                 # fo
 selection_wrap = true                                                       # wrap list if at bottom or top
 theme = "omarchy-default"                                                   # theme to use
 additional_theme_location = "./themes/"
+hide_quick_activation = true                                                # hide the keybind hints bar
 
 [placeholders]
 "default" = { input = " Search...", list = "No Results" } # placeholders for input and empty list, key is the providers name, so f.e. "desktopapplications" or "menus:other"
