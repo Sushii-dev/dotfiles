@@ -1,7 +1,7 @@
 [general]
 mode = normal
 framerate = 60
-bars = 80
+bars = 36
 bar_width = 1
 bar_spacing = 0
 sensitivity = 175
