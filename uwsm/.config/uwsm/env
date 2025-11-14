@@ -9,3 +9,6 @@ source ~/.config/uwsm/default
 
 # Activate mise if present on the system
 omarchy-cmd-present mise && eval "$(mise activate bash)"
+
+# Add Flatpak application directories so Walker/launchers can find them
+export XDG_DATA_DIRS="/var/lib/flatpak/exports/share:$HOME/.local/share/flatpak/exports/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"

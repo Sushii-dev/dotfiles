@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# Force all themed apps to reload their themes
+# Run this after changing Omarchy themes to ensure all apps pick up the new colors
+
+set -e
+
+echo "[force-theme-reload] Starting theme reload for all apps..."
+
+# ============================================================================
+# DISCORD / VESKTOP
+# ============================================================================
+echo "[force-theme-reload] Reloading Discord/Vesktop..."
+
+# Find and restart Discord/Vesktop
+if pgrep -x "vesktop" > /dev/null 2>&1; then
+    echo "  - Restarting Vesktop..."
+    pkill -9 vesktop
+    sleep 0.5
+    setsid vesktop &>/dev/null &
+    echo "  ✓ Vesktop restarted"
+elif pgrep -x "Discord" > /dev/null 2>&1 || pgrep -x "discord" > /dev/null 2>&1; then
+    echo "  - Restarting Discord..."
+    pkill -9 Discord discord 2>/dev/null || true
+    sleep 0.5
+    if command -v discord &>/dev/null; then
+        setsid discord &>/dev/null &
+    fi
+    echo "  ✓ Discord restarted"
+else
+    echo "  - Discord/Vesktop not running, skipping..."
+fi
+
+# ============================================================================
+# SPOTIFY
+# ============================================================================
+echo "[force-theme-reload] Reloading Spotify..."
+
+if command -v spicetify &>/dev/null; then
+    if pgrep -x "spotify" > /dev/null 2>&1; then
+        echo "  - Restarting Spotify with new theme..."
+        killall -9 spotify 2>/dev/null || true
+        sleep 0.5
+        spicetify apply &>/dev/null
+        sleep 1
+        killall -9 spotify 2>/dev/null || true
+        echo "  ✓ Spotify theme applied (restart Spotify manually to see changes)"
+    else
+        echo "  - Applying Spotify theme (not running)..."
+        spicetify apply &>/dev/null
+        echo "  ✓ Spotify theme applied"
+    fi
+else
+    echo "  - Spicetify not installed, skipping Spotify..."
+fi
+
+# ============================================================================
+# STEAM
+# ============================================================================
+echo "[force-theme-reload] Reloading Steam..."
+
+if command -v steam &>/dev/null; then
+    STEAM_WAS_RUNNING=false
+    if pgrep -x "steam" > /dev/null 2>&1 || pgrep -x "steamwebhelper" > /dev/null 2>&1; then
+        STEAM_WAS_RUNNING=true
+        echo "  - Steam is running (restart Steam manually to see theme changes)"
+    fi
+    
+    # The theme is already applied by the hook script
+    # Steam needs a manual restart to pick up changes
+    echo "  ✓ Steam theme updated (restart Steam to apply)"
+else
+    echo "  - Steam not installed, skipping..."
+fi
+
+# ============================================================================
+# GTK APPS (File Manager, Settings, etc.)
+# ============================================================================
+echo "[force-theme-reload] Reloading GTK apps..."
+
+# Restart common GTK apps
+GTK_APPS=("nautilus" "nemo" "thunar" "gnome-control-center" "gnome-text-editor")
+RESTARTED_ANY=false
+
+for app in "${GTK_APPS[@]}"; do
+    if pgrep -x "$app" > /dev/null 2>&1; then
+        echo "  - Restarting $app..."
+        pkill -9 "$app"
+        sleep 0.3
+        setsid "$app" &>/dev/null &
+        RESTARTED_ANY=true
+    fi
+done
+
+if [ "$RESTARTED_ANY" = false ]; then
+    echo "  - No GTK apps running, skipping..."
+else
+    echo "  ✓ GTK apps restarted"
+fi
+
+# ============================================================================
+# DONE
+# ============================================================================
+echo ""
+echo "[force-theme-reload] ✓ Theme reload complete!"
+echo ""
+echo "Apps that need manual restart:"
+echo "  - Steam (if running)"
+echo "  - Any other running GTK apps"
+echo ""
+
