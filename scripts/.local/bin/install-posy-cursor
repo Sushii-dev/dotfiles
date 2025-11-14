@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Install Posy's Improved Cursor (Black version)
+
+set -e
+
+CURSOR_DIR="$HOME/.local/share/icons/Posy_Cursor_Black"
+
+if [ -d "$CURSOR_DIR" ]; then
+    echo "✓ Posy's Cursor Black is already installed"
+    exit 0
+fi
+
+echo "Installing Posy's Improved Cursor (Black version)..."
+
+# Clone the repository to /tmp
+cd /tmp
+if [ -d "posy-improved-cursor-linux" ]; then
+    rm -rf posy-improved-cursor-linux
+fi
+
+git clone --depth 1 https://github.com/simtrami/posy-improved-cursor-linux.git
+
+# Install to user directory
+mkdir -p "$HOME/.local/share/icons"
+cp -r posy-improved-cursor-linux/Posy_Cursor_Black "$HOME/.local/share/icons/"
+
+# Cleanup
+rm -rf posy-improved-cursor-linux
+
+echo "✓ Posy's Cursor Black installed successfully!"
+echo "  You may need to log out and back in for changes to take effect everywhere."
+
