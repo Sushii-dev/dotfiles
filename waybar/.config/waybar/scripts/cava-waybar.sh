@@ -33,9 +33,9 @@ cava -p "$CONFIG_PATH" 2>/dev/null | while IFS= read -r line; do
     for val in $line; do
         # Clamp value between 0-7 and get corresponding block
         if [[ "$val" =~ ^[0-9]+$ ]] && [ "$val" -ge 0 ] && [ "$val" -le 7 ] 2>/dev/null; then
-            output+="${BLOCKS[$val]}"
+            output+="${BLOCKS[$val]} "
         else
-            output+="${BLOCKS[0]}"
+            output+="${BLOCKS[0]} "
         fi
     done
     
