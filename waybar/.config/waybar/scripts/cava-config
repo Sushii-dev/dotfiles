@@ -1,8 +1,8 @@
 [general]
 mode = normal
-framerate = 30
-bars = 28
-bar_width = 2
+framerate = 60
+bars = 80
+bar_width = 1
 bar_spacing = 0
 sensitivity = 175
 
@@ -25,9 +25,9 @@ gradient_color_2 = '#bb9af7'
 gradient_color_3 = '#7dcfff'
 
 [smoothing]
-integral = 80
+integral = 85
 monstercat = 1
 waves = 1
-gravity = 100
+gravity = 120
 ignore = 0
 
