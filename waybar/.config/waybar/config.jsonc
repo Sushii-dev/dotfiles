@@ -39,7 +39,7 @@
     }
   },
   "custom/omarchy": {
-    "format": "<span font='CaskaydiaMono Nerd Font'></span>",
+    "format": "🍣",
     "on-click": "omarchy-menu",
     "on-click-right": "xdg-terminal-exec",
     "tooltip-format": "Omarchy Menu\n\nSuper + Alt + Space"
