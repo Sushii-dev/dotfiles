@@ -103,5 +103,22 @@ else
   echo "            After login, run: install-posy-cursor"
 fi
 
+echo ""
+echo "[bootstrap] Optional: Install NextDNS for system-wide ad blocking?"
+echo "            (requires sudo to set up system service)"
+read -p "Install NextDNS? [y/N]: " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+  if command -v install-nextdns &>/dev/null; then
+    install-nextdns
+  else
+    echo "[bootstrap] WARNING: install-nextdns not in PATH yet."
+    echo "            After login, run: install-nextdns"
+  fi
+else
+  echo "[bootstrap] Skipping NextDNS. You can install it later with: install-nextdns"
+fi
+
+echo ""
 echo "[bootstrap] Done."
 echo "[bootstrap] If anything feels off, your old configs are in: $BACKUP_DIR"

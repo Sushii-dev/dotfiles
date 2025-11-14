@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Install and configure NextDNS with your profile
+
+set -e
+
+NEXTDNS_CONFIG_ID="55f11a"
+
+echo "=========================================="
+echo "   NextDNS Installation"
+echo "=========================================="
+echo ""
+
+# Check if already installed
+if command -v nextdns &>/dev/null; then
+    echo "✓ NextDNS is already installed"
+    
+    # Check if it's running
+    if nextdns status &>/dev/null; then
+        echo "✓ NextDNS is active and running"
+        nextdns status
+        exit 0
+    else
+        echo "⚠️  NextDNS is installed but not running"
+        echo "   Configuring..."
+    fi
+else
+    echo "[1/2] Installing NextDNS CLI..."
+    sh -c "$(curl -sL https://nextdns.io/install)"
+fi
+
+echo ""
+echo "[2/2] Configuring NextDNS with profile: $NEXTDNS_CONFIG_ID"
+echo "   This requires sudo to set up the system service..."
+
+sudo nextdns install \
+    -config "$NEXTDNS_CONFIG_ID" \
+    -report-client-info \
+    -auto-activate
+
+echo ""
+echo "=========================================="
+echo "   ✓ NextDNS Setup Complete!"
+echo "=========================================="
+echo ""
+echo "NextDNS Status:"
+nextdns status
+echo ""
+echo "Your system now has DNS-level ad blocking!"
+echo ""
+echo "To verify it's working, visit: https://test.nextdns.io"
+echo ""
+
