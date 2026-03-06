@@ -1,0 +1,86 @@
+# Claude Auto-Context
+
+This file is automatically read by Claude Code at session start.
+
+## System Structure
+
+### Machine
+- **Hostname:** Sushimus
+- **OS:** CachyOS (Arch-based, kernel 6.17.x)
+- **Desktop:** Niri (scrollable tiling Wayland compositor)
+- **Dotfiles:** DMS dotfiles (Quickshell-based widgets, auto-generated niri config)
+- **User:** sushii
+
+### Storage Layout
+
+| Drive | Size | Mount | Label | Purpose |
+|-------|------|-------|-------|---------|
+| nvme1n1p2 | 892GB | `/` `/home` | (root) | System drive - OS, home directory |
+| nvme1n1p1 | 2GB | `/boot` | - | Boot partition |
+| nvme0n1p1 | 3.6TB | `/mnt/Tsukiji` | Tsukiji | Games & large files (Steam, ComfyUI, Modding) |
+| nvme2n1p1 | 931GB | `/mnt/Noren` | Noren | AI projects & models |
+| USB | varies | `/run/media/sushii/*` | varies | Removable drives auto-mount here |
+
+### Key Directories
+
+| Path | Purpose |
+|------|---------|
+| `/home/sushii/` | Home directory |
+| `/home/sushii/.claude-context/` | Claude context persistence system |
+| `/mnt/Tsukiji/` | Large storage - games, backups, media |
+| `/mnt/Noren/AI/` | AI projects and models |
+| `/run/media/sushii/` | USB/removable drives mount here |
+
+### Desktop Environment
+- **Compositor:** Niri (scrollable tiling Wayland)
+- **Dotfiles:** DMS (Quickshell widgets, `~/.config/niri/dms/`)
+- **Terminal:** Ghostty (`~/.config/ghostty/`)
+- **Shell:** fish (primary), zsh and bash available
+- **Config location:** `~/.config/` (niri, ghostty, fish, quickshell, etc.)
+
+---
+
+## Context System
+
+Check for active projects and context at:
+```
+~/.claude-context/
+```
+
+### Quick Commands
+
+- **List active projects:** `ls ~/.claude-context/projects/`
+- **Read project state:** `cat ~/.claude-context/projects/{name}/STATE.md`
+- **Update this file:** `~/.claude-context/update-claude-md.sh`
+
+## Active Projects
+
+| Project | Status | Context Path |
+|---------|--------|--------------|
+| gaming-hdr-settings |  | `~/.claude-context/projects/gaming-hdr-settings/STATE.md` |
+| gaming-latency | READY - Reboot via Limine to activate all optimizations | `~/.claude-context/projects/gaming-latency/STATE.md` |
+| greetd-dms |  | `~/.claude-context/projects/greetd-dms/STATE.md` |
+| latency-optimizations |  | `~/.claude-context/projects/latency-optimizations/STATE.md` |
+| mhwilds-5090-fix |  | `~/.claude-context/projects/mhwilds-5090-fix/STATE.md` |
+| mhwilds-hang |  | `~/.claude-context/projects/mhwilds-hang/STATE.md` |
+| mhwilds-modding |  | `~/.claude-context/projects/mhwilds-modding/STATE.md` |
+| nvidia-575-fix |  | `~/.claude-context/projects/nvidia-575-fix/STATE.md` |
+| portable-usb | IN PROGRESS - Waiting for restart to fix sudo | `~/.claude-context/projects/portable-usb/STATE.md` |
+| system-update |  | `~/.claude-context/projects/system-update/STATE.md` |
+
+
+## On Session Start
+
+If resuming work, read the relevant STATE.md file for full context including:
+- What's been completed
+- What's in progress
+- Next steps
+- Important paths and commands
+
+## User Preferences
+
+- User: sushii
+- Primary work directories: `/home/sushii/`, USB drives at `/run/media/sushii/`
+- Large file storage: `/mnt/Tsukiji/`
+- AI/ML projects: `/mnt/Noren/AI/`
+- Context storage: `~/.claude-context/`

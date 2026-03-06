@@ -1,0 +1,6 @@
+[Unit]
+Description=Regenerate starship.toml from DMS colors
+
+[Service]
+Type=oneshot
+ExecStart=/home/sushii/.local/bin/dms-update-starship

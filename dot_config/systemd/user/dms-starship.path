@@ -1,0 +1,8 @@
+[Unit]
+Description=Watch DMS colors for starship regeneration
+
+[Path]
+PathModified=/home/sushii/.cache/DankMaterialShell/dms-colors.json
+
+[Install]
+WantedBy=default.target

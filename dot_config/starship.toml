@@ -1,0 +1,113 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
+palette = "dankcolors"
+
+format = """
+[░▒▓](icon_bg)\
+$os\
+[](bg:dir_bg fg:icon_bg)\
+$directory\
+[](fg:dir_bg bg:git_bg)\
+$git_branch\
+$git_status\
+[](fg:git_bg bg:lang_bg)\
+$c\
+$python\
+$rust\
+$golang\
+$nodejs\
+$java\
+[](fg:lang_bg bg:time_bg)\
+$time\
+[ ](fg:time_bg)\
+$cmd_duration\
+\n$character"""
+
+[palettes.dankcolors]
+icon_bg = "#99ccfa"
+dir_bg = "#7eb9ed"
+git_bg = "#394857"
+lang_bg = "#214c73"
+time_bg = "#101418"
+text = "#e0e2e8"
+dark_text = "#101418"
+accent = "#99ccfa"
+dimmed = "#8c9198"
+error = "#ffb4ab"
+success = "#7dfa8d"
+warning = "#fff772"
+
+[os]
+style = "bold fg:dark_text bg:icon_bg"
+disabled = false
+
+[os.symbols]
+Arch = "🍣 "
+CachyOS = "🍣 "
+Linux = "🍣 "
+
+[directory]
+style = "fg:text bg:dir_bg"
+format = "[ $path ]($style)"
+truncation_length = 3
+truncation_symbol = "…/"
+
+[directory.substitutions]
+"Documents" = "󰈙 "
+"Downloads" = " "
+"Music" = " "
+"Pictures" = " "
+
+[git_branch]
+symbol = ""
+style = "bg:git_bg"
+format = '[[ $symbol $branch ](fg:accent bg:git_bg)]($style)'
+
+[git_status]
+style = "bg:git_bg"
+format = '[[($all_status$ahead_behind )](fg:accent bg:git_bg)]($style)'
+
+[c]
+symbol = " "
+style = "bg:lang_bg"
+format = '[[ $symbol ($version) ](fg:accent bg:lang_bg)]($style)'
+
+[python]
+symbol = " "
+style = "bg:lang_bg"
+format = '[[ $symbol ($version) ](fg:accent bg:lang_bg)]($style)'
+
+[rust]
+symbol = ""
+style = "bg:lang_bg"
+format = '[[ $symbol ($version) ](fg:accent bg:lang_bg)]($style)'
+
+[golang]
+symbol = ""
+style = "bg:lang_bg"
+format = '[[ $symbol ($version) ](fg:accent bg:lang_bg)]($style)'
+
+[nodejs]
+symbol = ""
+style = "bg:lang_bg"
+format = '[[ $symbol ($version) ](fg:accent bg:lang_bg)]($style)'
+
+[java]
+symbol = " "
+style = "bg:lang_bg"
+format = '[[ $symbol ($version) ](fg:accent bg:lang_bg)]($style)'
+
+[time]
+disabled = false
+time_format = "%R"
+style = "bg:time_bg"
+format = '[[  $time ](fg:dimmed bg:time_bg)]($style)'
+
+[cmd_duration]
+min_time = 2_000
+style = "dimmed"
+format = " [$duration]($style)"
+
+[character]
+success_symbol = "[❯](bold accent)"
+error_symbol = "[❯](bold error)"
