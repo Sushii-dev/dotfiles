@@ -23,6 +23,13 @@
 - Ghostty: added adjust-cell-height = 4 for line spacing
 - Niri: border gradient yellow/pink → pink/purple (#e88fb4 → #b48fe8)
 
+### Added (multi-device)
+- chezmoi template for CLAUDE.md (per-hostname rendering)
+- Merge script for Claude settings.json (union permissions, device wins)
+- Memory sync script (places memories in correct username-based path)
+- Systemd watcher for Niri border gradient (auto-patches DMS regeneration)
+- Niri: border gradient pink→purple (#f078a0 → #9060e8)
+
 ### Removed
 - Ghostty: invalid `performable:` keybind prefix (not supported in 1.2.3)
 - SSH key passphrase (no longer needed, simplifies multi-terminal usage)
