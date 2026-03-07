@@ -19,3 +19,6 @@
 [diff]
     colorMoved = default
     algorithm = histogram
+[user]
+	email = markus@rindahl.me
+	name = Sushii-dev

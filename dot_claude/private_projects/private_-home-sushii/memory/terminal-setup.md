@@ -41,10 +41,12 @@ A Python script reads this and regenerates configs for tools that DMS doesn't na
 - `adjust-cursor-height = -4` — shrinks block cursor height (does NOT work for bar cursors)
 - `adjust-cell-height = 4` — adds line spacing
 - Background: opacity 0.5, blur radius 32
-- Keybinds: Ctrl+V=paste, shift+arrows=adjust_selection (removed invalid `performable:` prefix keybind)
+- `copy-on-select = clipboard` — selecting text auto-copies to system clipboard (not `true`, which copies to primary selection only)
+- Keybinds: Ctrl+V=paste, Ctrl+Shift+C=copy, shift+arrows=adjust_selection
 - Theme: `dankcolors` (DMS-generated)
 - `gtk-single-instance = true` — config changes need full restart (close all windows)
 - `performable:` keybind prefix is NOT valid in Ghostty 1.2.3
+- Dotfiles managed with chezmoi, repo: `Sushii-dev/dotfiles` (private, SSH)
 
 ## Niri Tweaks (from this session)
 - `focus-follows-mouse` enabled
