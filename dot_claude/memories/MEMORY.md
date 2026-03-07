@@ -1,5 +1,16 @@
 # Memory Index
 
+## Dotfiles & Chezmoi
+- Managed with chezmoi, repo: `Sushii-dev/dotfiles` (private, SSH)
+- Source dir: `~/.local/share/chezmoi/`
+- Multi-device: CLAUDE.md templated per hostname, settings.json merged via modify script
+- Desktop hostname: `Sushitop`, user: `sushii`
+- Laptop user: `markusmi` (hostname unknown — add to CLAUDE.md template when discovered)
+- GitHub CLI (`gh`) authenticated via SSH
+- Git identity: `Sushii-dev <markus@rindahl.me>`
+- SSH key: `~/.ssh/id_ed25519` — no passphrase
+- See [terminal-setup.md](terminal-setup.md) for full terminal/niri config details
+
 ## Carepackages
 - `~/carepackages/` — directory for care packages sent to partner via Discord
 - See [terraria-multiplayer.md](terraria-multiplayer.md) for tModLoader setup details
@@ -11,11 +22,8 @@
 
 ## DMS Greeter / Greetd
 - See `~/.claude-context/projects/greetd-dms/STATE.md` for full context
-- Multi-monitor bug: DMS greeter auth fails when `Quickshell.screens[0]` isn't the screen the user interacts with. `isPrimaryScreen` check gates auth handler, `passwordSubmitRequested` is per-instance local state.
+- Multi-monitor bug: DMS greeter auth fails when `Quickshell.screens[0]` isn't the screen the user interacts with
 - Fix: disable secondary monitor in `/etc/greetd/niri/dms.kdl` (set `off`)
-- Niri output order (DP-1, DP-2) doesn't match physical/config order — AOC is DP-1, Samsung is DP-2
-- Quickshell logs at `/run/user/954/quickshell/by-id/*/log.log` (per-boot, greeter user)
-- Debugging approach: strace on quickshell PID, filter for greetd socket writes
 
 ## Hardware
 - Samsung Odyssey G85SB ultrawide (3440x1440@175Hz) — DP-2 in niri
@@ -26,7 +34,6 @@
 - **Compositor:** Niri (scrollable tiling Wayland), NOT Hyprland
 - **Dotfiles:** DMS (Quickshell-based), NOT End-4 HyprDots
 - **Terminal:** Ghostty 1.2.3 with custom "dankcolors" theme
-- **Shell:** fish 4.5.0 (primary), zsh also installed with Powerlevel10k (wizard disabled)
-- **Font:** JetBrainsMono Nerd Font (installed to ~/.local/share/fonts/JetBrainsMono/)
-- CLAUDE.md previously had wrong compositor/dotfiles info -- corrected 2026-03-06
+- **Shell:** fish (primary), zsh also installed
+- **Font:** JetBrainsMono Nerd Font (`~/.local/share/fonts/JetBrainsMono/`)
 - See [terminal-setup.md](terminal-setup.md) for full terminal customization details

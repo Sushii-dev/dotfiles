@@ -48,9 +48,11 @@ A Python script reads this and regenerates configs for tools that DMS doesn't na
 - `performable:` keybind prefix is NOT valid in Ghostty 1.2.3
 - Dotfiles managed with chezmoi, repo: `Sushii-dev/dotfiles` (private, SSH)
 
-## Niri Tweaks (from this session)
+## Niri Tweaks
 - `focus-follows-mouse` enabled
-- Gradient borders: yellow→pink, `relative-to="window"` in `~/.config/niri/dms/colors.kdl`
+- Gradient borders: pink→purple (#f078a0 → #9060e8), `relative-to="window"`
+- Border gradient persisted via systemd watcher (`dms-border-gradient.path`) — auto-patches after DMS regeneration
+- Script: `~/.local/bin/dms-fix-border-gradient`
 - Gaps: 8, border/focus-ring width: 1 in `~/.config/niri/dms/layout.kdl`
 - Per-monitor layouts in `~/.config/niri/dms/outputs.kdl`
 - Keybinds in `~/.config/niri/dms/binds.kdl`: Mod+S screenshot, Mod+Shift+S region, Mod+E dolphin
