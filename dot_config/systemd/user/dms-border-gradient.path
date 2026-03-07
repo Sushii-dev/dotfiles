@@ -1,0 +1,8 @@
+[Unit]
+Description=Watch DMS colors.kdl for changes
+
+[Path]
+PathChanged=%h/.config/niri/dms/colors.kdl
+
+[Install]
+WantedBy=default.target

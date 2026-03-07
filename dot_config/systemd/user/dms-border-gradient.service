@@ -1,0 +1,6 @@
+[Unit]
+Description=Fix DMS border gradient after regeneration
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/dms-fix-border-gradient

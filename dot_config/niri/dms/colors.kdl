@@ -5,13 +5,13 @@ layout {
     background-color "transparent"
 
     focus-ring {
-        active-color   "#99ccfa"
+        active-gradient from="#f078a0" to="#9060e8" angle=45 relative-to="window"
         inactive-color "#8c9198"
         urgent-color   "#ffb4ab"
     }
 
     border {
-        active-color   "#99ccfa"
+        active-gradient from="#f078a0" to="#9060e8" angle=45 relative-to="window"
         inactive-color "#8c9198"
         urgent-color   "#ffb4ab"
     }

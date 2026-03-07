@@ -1,0 +1,4 @@
+#!/bin/bash
+# Patches DMS colors.kdl to use custom border gradient after DMS regenerates it
+sed -i 's/active-color   "#[0-9a-fA-F]*"/active-gradient from="#f078a0" to="#9060e8" angle=45 relative-to="window"/g' \
+    ~/.config/niri/dms/colors.kdl
