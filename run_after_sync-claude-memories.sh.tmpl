@@ -1,0 +1,15 @@
+#!/bin/bash
+# Sync shared Claude memories to the correct username-based path
+MEMORY_SRC="{{ .chezmoi.sourceDir }}/dot_claude/memories"
+MEMORY_DST="{{ .chezmoi.homeDir }}/.claude/projects/-home-{{ .chezmoi.username }}/memory"
+
+mkdir -p "$MEMORY_DST"
+
+# Copy memories, don't overwrite if destination is newer
+for f in "$MEMORY_SRC"/*.md; do
+    [ -f "$f" ] || continue
+    base=$(basename "$f")
+    if [ ! -f "$MEMORY_DST/$base" ] || [ "$f" -nt "$MEMORY_DST/$base" ]; then
+        cp "$f" "$MEMORY_DST/$base"
+    fi
+done

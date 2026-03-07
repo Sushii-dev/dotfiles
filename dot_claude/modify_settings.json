@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""Merge Claude settings.json: union permissions, existing device config wins on conflicts."""
+import json
+import sys
+
+# Base permissions shared across all devices
+BASE_ALLOW = [
+    "Bash(cat:*)",
+    "Bash(done)",
+    "Bash(python3:*)",
+    "Bash(docker:*)",
+    "Bash(tree:*)",
+    "Bash(ip:*)",
+    "Bash(ls:*)",
+    "Bash(mkdir:*)",
+    "Bash(find:*)",
+    "Bash(chmod:*)",
+    "Bash(cp:*)",
+    "Bash(curl:*)",
+    "Bash(grep:*)",
+    "Bash(echo:*)",
+    "Bash(tee:*)",
+    "Bash(printf:*)",
+    "Bash(file:*)",
+    "Bash(kill:*)",
+    "Bash(ps:*)",
+    "Bash(du:*)",
+    "Bash(unzip:*)",
+    "Bash(tar:*)",
+    "Bash(ping:*)",
+    "Bash(git pull:*)",
+    "Bash(fish:*)",
+    "Bash(pacman:*)",
+    "Bash(sudo pacman:*)",
+    "Bash(systemctl:*)",
+    "Bash(systemctl status:*)",
+    "Bash(systemctl --user restart:*)",
+    "Bash(journalctl:*)",
+    "Bash(fastfetch:*)",
+    "Bash(gh api:*)",
+    "Bash(gh release:*)",
+    "Bash(xargs:*)",
+    "Bash(cd:*)",
+    "Bash(pgrep:*)",
+    "Bash(lscpu:*)",
+    "Bash(~/.claude-context/update-claude-md.sh)",
+    "WebSearch",
+    "WebFetch(domain:github.com)",
+    "WebFetch(domain:raw.githubusercontent.com)",
+]
+
+BASE_SETTINGS = {
+    "effortLevel": "high",
+}
+
+# Read existing config from stdin (chezmoi passes current file contents)
+existing_raw = sys.stdin.read().strip()
+
+if existing_raw:
+    existing = json.loads(existing_raw)
+else:
+    existing = {}
+
+# Ensure structure
+if "permissions" not in existing:
+    existing["permissions"] = {}
+if "allow" not in existing["permissions"]:
+    existing["permissions"]["allow"] = []
+
+# Merge: add base permissions that don't already exist
+existing_allow = set(existing["permissions"]["allow"])
+for perm in BASE_ALLOW:
+    if perm not in existing_allow:
+        existing["permissions"]["allow"].append(perm)
+
+# Set base settings only if not already set (device wins)
+for key, value in BASE_SETTINGS.items():
+    if key not in existing:
+        existing[key] = value
+
+print(json.dumps(existing, indent=2))
