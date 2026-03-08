@@ -8,6 +8,7 @@ we only enforce fonts, icons, and the alternate background fix.
 import sys
 import configparser
 
+# Always overwrite these keys
 OVERRIDES = {
     "General": {
         "font": "JetBrainsMono Nerd Font,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,Regular",
@@ -18,6 +19,13 @@ OVERRIDES = {
     },
     "Icons": {
         "Theme": "Colloid-Dark",
+    },
+}
+
+# Only set these if the key is missing (lets DMS manage the value after first apply)
+DEFAULTS = {
+    "General": {
+        "ColorScheme": "DankMatugenDark",
     },
 }
 
@@ -53,6 +61,34 @@ for section, keys in OVERRIDES.items():
             for i in range(section_idx + 1, insert_at):
                 if output[i].split("=")[0].strip() == k:
                     output[i] = f"{k}={v}"
+                    found = True
+                    break
+            if not found:
+                output.insert(insert_at, f"{k}={v}")
+                insert_at += 1
+
+# Apply defaults (only if key is missing)
+for section, keys in DEFAULTS.items():
+    section_idx = None
+    next_section_idx = None
+    for i, line in enumerate(output):
+        if line.strip() == f"[{section}]":
+            section_idx = i
+        elif section_idx is not None and line.strip().startswith("[") and i > section_idx:
+            next_section_idx = i
+            break
+
+    if section_idx is None:
+        output.append("")
+        output.append(f"[{section}]")
+        for k, v in keys.items():
+            output.append(f"{k}={v}")
+    else:
+        insert_at = next_section_idx if next_section_idx else len(output)
+        for k, v in keys.items():
+            found = False
+            for i in range(section_idx + 1, insert_at):
+                if output[i].split("=")[0].strip() == k:
                     found = True
                     break
             if not found:
