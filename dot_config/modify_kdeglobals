@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Merge font, icon, and view settings into kdeglobals.
+"""Merge fonts, icons, and DMS color scheme into kdeglobals.
 
-Reads existing kdeglobals from stdin, merges our overrides,
-prints result to stdout. DMS and KDE manage the color values —
-we only enforce fonts, icons, and the alternate background fix.
+Reads existing kdeglobals from stdin, merges:
+1. Font and icon overrides (always applied)
+2. DMS color scheme from ~/.local/share/color-schemes/DankMatugenDark.colors
+   (replaces plasma-apply-colorscheme which only exists on Plasma systems)
+
+Prints result to stdout.
 """
+import os
 import sys
-import configparser
 
 # Always overwrite these keys
 OVERRIDES = {
@@ -22,77 +25,105 @@ OVERRIDES = {
     },
 }
 
-# Only set these if the key is missing (lets DMS manage the value after first apply)
-DEFAULTS = {
-    "General": {
-        "ColorScheme": "DankMatugenDark",
-    },
+# Sections from the .colors file to merge into kdeglobals
+COLOR_SECTIONS = {
+    "ColorEffects:Disabled",
+    "ColorEffects:Inactive",
+    "Colors:Button",
+    "Colors:Complementary",
+    "Colors:Header",
+    "Colors:Header][Inactive",  # KDE uses this weird nested syntax
+    "Colors:Selection",
+    "Colors:Tooltip",
+    "Colors:View",
+    "Colors:Window",
+    "WM",
 }
 
+
+def parse_ini_sections(text):
+    """Parse KDE ini-like format into {section: {key: value}}."""
+    sections = {}
+    current = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            current = stripped[1:-1]
+            if current not in sections:
+                sections[current] = {}
+        elif "=" in stripped and current is not None:
+            k, v = stripped.split("=", 1)
+            sections[current][k.strip()] = v.strip()
+    return sections
+
+
+def merge_section(output, section, keys, overwrite=True):
+    """Merge keys into a section of the output lines."""
+    header = f"[{section}]"
+    section_idx = None
+    next_section_idx = None
+    for i, line in enumerate(output):
+        if line.strip() == header:
+            section_idx = i
+        elif section_idx is not None and line.strip().startswith("[") and i > section_idx:
+            next_section_idx = i
+            break
+
+    if section_idx is None:
+        output.append("")
+        output.append(header)
+        for k, v in keys.items():
+            output.append(f"{k}={v}")
+    else:
+        insert_at = next_section_idx if next_section_idx else len(output)
+        for k, v in keys.items():
+            found = False
+            for i in range(section_idx + 1, insert_at):
+                if output[i].split("=")[0].strip() == k:
+                    if overwrite:
+                        output[i] = f"{k}={v}"
+                    found = True
+                    break
+            if not found:
+                output.insert(insert_at, f"{k}={v}")
+                insert_at += 1
+
+
+# Read current kdeglobals
 existing = sys.stdin.read()
+output = existing.splitlines()
 
-# kdeglobals uses KDE's ini-like format — configparser works for our keys
-# but we do raw string manipulation to avoid mangling existing content
-lines = existing.splitlines()
-output = list(lines)
-
+# 1. Apply font/icon overrides
 for section, keys in OVERRIDES.items():
-    # Find section
-    section_idx = None
-    next_section_idx = None
-    for i, line in enumerate(output):
-        if line.strip() == f"[{section}]":
-            section_idx = i
-        elif section_idx is not None and line.strip().startswith("[") and i > section_idx:
-            next_section_idx = i
-            break
+    merge_section(output, section, keys, overwrite=True)
 
-    if section_idx is None:
-        # Add section at end
-        output.append("")
-        output.append(f"[{section}]")
-        for k, v in keys.items():
-            output.append(f"{k}={v}")
-    else:
-        insert_at = next_section_idx if next_section_idx else len(output)
-        for k, v in keys.items():
-            # Check if key exists in section
-            found = False
-            for i in range(section_idx + 1, insert_at):
-                if output[i].split("=")[0].strip() == k:
-                    output[i] = f"{k}={v}"
-                    found = True
-                    break
-            if not found:
-                output.insert(insert_at, f"{k}={v}")
-                insert_at += 1
+# 2. Read DMS color scheme and merge color sections
+colors_path = os.path.expanduser(
+    "~/.local/share/color-schemes/DankMatugenDark.colors"
+)
+if os.path.isfile(colors_path):
+    with open(colors_path) as f:
+        scheme = parse_ini_sections(f.read())
 
-# Apply defaults (only if key is missing)
-for section, keys in DEFAULTS.items():
-    section_idx = None
-    next_section_idx = None
-    for i, line in enumerate(output):
-        if line.strip() == f"[{section}]":
-            section_idx = i
-        elif section_idx is not None and line.strip().startswith("[") and i > section_idx:
-            next_section_idx = i
-            break
+    for section_name in COLOR_SECTIONS:
+        if section_name in scheme:
+            merge_section(output, section_name, scheme[section_name], overwrite=True)
 
-    if section_idx is None:
-        output.append("")
-        output.append(f"[{section}]")
-        for k, v in keys.items():
-            output.append(f"{k}={v}")
-    else:
-        insert_at = next_section_idx if next_section_idx else len(output)
-        for k, v in keys.items():
-            found = False
-            for i in range(section_idx + 1, insert_at):
-                if output[i].split("=")[0].strip() == k:
-                    found = True
-                    break
-            if not found:
-                output.insert(insert_at, f"{k}={v}")
-                insert_at += 1
+    # Set ColorScheme and Name from the scheme file
+    general_from_scheme = scheme.get("General", {})
+    merge_section(output, "General", {
+        "ColorScheme": general_from_scheme.get("ColorScheme", "DankMatugenDark"),
+        "Name": general_from_scheme.get("Name", "Dank Shell (matugen)"),
+    }, overwrite=True)
+
+    # Set KDE contrast from scheme
+    kde_from_scheme = scheme.get("KDE", {})
+    if kde_from_scheme:
+        merge_section(output, "KDE", kde_from_scheme, overwrite=True)
+else:
+    # No .colors file yet (fresh install before DMS runs) — set a dark fallback
+    merge_section(output, "General", {
+        "ColorScheme": "DankMatugenDark",
+    }, overwrite=False)
 
 print("\n".join(output))
