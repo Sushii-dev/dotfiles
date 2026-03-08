@@ -319,9 +319,23 @@ window-rule {
     default-column-width { proportion 1.0; }
     default-window-height { proportion 0.5; }
 }
-// Dolphin translucency
+// KDE app translucency (Dolphin, Ark, Okular)
 window-rule {
     match app-id="org.kde.dolphin"
+    match app-id="org.kde.ark"
+    match app-id="org.kde.okular"
+    opacity 0.90
+}
+// Loupe (GNOME image viewer)
+window-rule {
+    match app-id="org.gnome.Loupe"
+    opacity 0.92
+}
+// Qalculate (calculator - float it)
+window-rule {
+    match app-id="io.github.Qalculate.qalculate-gtk"
+    match app-id="qalculate-gtk"
+    open-floating true
     opacity 0.90
 }
 // Open dms windows as floating by default
