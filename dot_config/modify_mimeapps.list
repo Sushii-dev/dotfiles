@@ -88,7 +88,9 @@ DEFAULTS = {
 }
 
 existing = sys.stdin.read()
-lines = existing.splitlines()
+# Strip comments — mimeapps.list is Desktop Entry format which doesn't support # comments.
+# KDE's parser silently breaks on them.
+lines = [l for l in existing.splitlines() if not l.lstrip().startswith("#")]
 output = list(lines)
 
 # Find [Default Applications] section

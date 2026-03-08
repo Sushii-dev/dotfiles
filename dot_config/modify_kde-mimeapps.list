@@ -78,7 +78,7 @@ DEFAULTS = {
 }
 
 existing = sys.stdin.read()
-lines = existing.splitlines()
+lines = [l for l in existing.splitlines() if not l.lstrip().startswith("#")]
 output = list(lines)
 
 section_idx = None
