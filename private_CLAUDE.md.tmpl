@@ -19,7 +19,8 @@ All user configs are managed by **chezmoi** and shared across multiple machines 
 
 3. **Never put hardware-specific config in chezmoi** without templating:
    - Monitor layouts, output names (DP-1, DP-2, eDP-1), resolutions — these differ per machine
-   - DMS auto-generates `~/.config/niri/dms/*.kdl` files (colors, outputs, binds, layout, cursor, alttab, windowrules) — NEVER track these in chezmoi
+   - DMS auto-generates `~/.config/niri/dms/*.kdl` files (colors, outputs, layout, cursor, alttab, windowrules) — NEVER track these in chezmoi
+   - **Exception:** `binds.kdl` IS tracked in chezmoi — it contains custom keybinds translated from hyprland, not DMS defaults
    - If a config references a specific output/monitor, wrap it in `{{"{{"}} if eq .chezmoi.hostname "Sushitop" {{"}}"}}` blocks
    - Hostname for the desktop: `Sushitop`
 
@@ -49,6 +50,9 @@ All user configs are managed by **chezmoi** and shared across multiple machines 
 | `dot_config/niri/config.kdl.tmpl` | Niri config (templated: hardware rules conditional on hostname) |
 | `dot_config/vesktop/modify_settings.json` | Merges DMS splash colors into Vesktop |
 | `dot_config/vesktop/settings/modify_settings.json` | Merges theme + transparency into Vencord |
+| `dot_config/modify_kdeglobals` | Merges fonts, icons, and DMS color scheme into kdeglobals for Qt theming |
+| `dot_config/DankMaterialShell/modify_settings.json` | Merges universal DMS preferences (excludes hardware-specific keys) |
+| `dot_config/niri/dms/binds.kdl` | Custom niri keybinds (exception: tracked in chezmoi unlike other dms/*.kdl) |
 | `dot_config/modify_mimeapps.list` | Merges MIME defaults without clobbering user additions |
 | `dot_claude/modify_settings.json` | Merges base permissions into Claude settings |
 | `private_CLAUDE.md.tmpl` | This file (hostname-conditional system context) |
