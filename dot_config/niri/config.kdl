@@ -188,9 +188,10 @@ overview {
 environment {
   XDG_CURRENT_DESKTOP "niri"
   QT_QPA_PLATFORMTHEME "kde"
+  XDG_MENU_PREFIX "arch-"
 }
-// Propagate Qt theme to DBus-activated services (portals, etc.)
-spawn-at-startup "sh" "-c" "dbus-update-activation-environment --systemd QT_QPA_PLATFORMTHEME=kde"
+// Propagate Qt/KDE env to DBus-activated services (portals, kded6, etc.)
+spawn-at-startup "sh" "-c" "dbus-update-activation-environment --systemd QT_QPA_PLATFORMTHEME=kde XDG_MENU_PREFIX=arch-"
 hotkey-overlay {
     skip-at-startup
 }
