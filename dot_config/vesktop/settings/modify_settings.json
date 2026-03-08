@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""Merge DMS Vencord settings (transparency, theme, plugins) without clobbering.
+
+New plugins added by Vencord updates are preserved. Our plugin overrides
+only touch specific plugins we care about.
+"""
+import json
+import sys
+
+# Top-level settings to enforce
+TOP_LEVEL = {
+    "transparent": True,
+    "enabledThemes": ["dank-discord.css"],
+}
+
+# Plugins we explicitly enable/disable for DMS theming & usability
+PLUGIN_OVERRIDES = {
+    "AlwaysAnimate": {"enabled": True},
+    "BetterFolders": {"enabled": True},
+    "BiggerStreamPreview": {"enabled": True},
+    "PlainFolderIcon": {"enabled": True},
+    "VolumeBooster": {"enabled": True},
+    "WebScreenShareFixes": {"enabled": True},
+    "NoTrack": {"enabled": True, "disableAnalytics": True},
+}
+
+existing = sys.stdin.read().strip()
+if existing:
+    data = json.loads(existing)
+else:
+    data = {}
+
+# Merge top-level keys
+for key, val in TOP_LEVEL.items():
+    data[key] = val
+
+# Merge plugin overrides (preserve any existing plugin entries we don't touch)
+if "plugins" not in data:
+    data["plugins"] = {}
+
+for plugin, settings in PLUGIN_OVERRIDES.items():
+    if plugin in data["plugins"]:
+        data["plugins"][plugin].update(settings)
+    else:
+        data["plugins"][plugin] = settings
+
+print(json.dumps(data, indent=4))

@@ -1,12 +1,14 @@
-# Pacman packages
+# Pacman packages (apps & requirements)
 archlinux-xdg-menu
 ark
 loupe
 mpv
 okular
 qalculate-gtk
+ttf-jetbrains-mono-nerd
 
 # AUR packages (installed via paru)
 millennium
 mpv-thumbfast-git
 mpv-uosc
+vesktop

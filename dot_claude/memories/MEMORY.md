@@ -24,6 +24,14 @@
 - See `~/.claude-context/projects/greetd-dms/STATE.md` for full context
 - Multi-monitor bug: DMS greeter auth fails when `Quickshell.screens[0]` isn't the screen the user interacts with
 - Fix: disable secondary monitor in `/etc/greetd/niri/dms.kdl` (set `off`)
+- See [system-recovery.md](system-recovery.md) for TTY recovery instructions
+
+## Taskapp (Web Dev)
+- Next.js + Neon PostgreSQL + Vercel, repo: `sushii-dev/taskapp`
+- Project CLAUDE.md is authoritative for all code standards (lives in git repo)
+- MCP servers: Neon (database), Vercel (deployment), Figma (design)
+- Project configs stored at `~/.config/claude-project-configs/taskapp-*`
+- Auto-deployed to project dir by chezmoi run script when `~/Projects/taskapp/` exists
 
 ## Hardware
 - Samsung Odyssey G85SB ultrawide (3440x1440@175Hz) — DP-2 in niri

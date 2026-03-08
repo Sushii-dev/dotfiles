@@ -2,68 +2,113 @@
 
 This file is automatically read by Claude Code at session start.
 
+## CRITICAL: Chezmoi Dotfile Management
+
+All user configs are managed by **chezmoi** and shared across multiple machines (desktop, laptop, wife's desktop). When modifying any config file, you MUST edit the chezmoi source — never edit live files directly.
+
+### Core Rules
+
+1. **Always edit chezmoi source**, not live files:
+   - Source: `~/.local/share/chezmoi/`
+   - Live files at `~/.config/` are *generated* by chezmoi and will be overwritten
+   - Example: edit `~/.local/share/chezmoi/dot_config/mpv/mpv.conf`, NOT `~/.config/mpv/mpv.conf`
+
+2. **New app configs** must be added to chezmoi:
+   - Config files: `chezmoi add ~/.config/<app>/config` or create manually in source dir
+   - New packages: add to BOTH `~/.local/share/chezmoi/.package-list` AND the `PACMAN_PKGS`/`AUR_PKGS` arrays in `run_onchange_install-packages.sh.tmpl`
+
+3. **Never put hardware-specific config in chezmoi** without templating:
+   - Monitor layouts, output names (DP-1, DP-2, eDP-1), resolutions — these differ per machine
+   - DMS auto-generates `~/.config/niri/dms/*.kdl` files (colors, outputs, binds, layout, cursor, alttab, windowrules) — NEVER track these in chezmoi
+   - If a config references a specific output/monitor, wrap it in `{{"{{"}} if eq .chezmoi.hostname "Sushitop" {{"}}"}}` blocks
+   - Hostname for the desktop: `Sushitop`
+
+4. **Style and apps ARE universal** — these go in chezmoi:
+   - Window rules (opacity, floating, corner radius)
+   - App theming (Steam CSS, Vesktop/Discord theme, mpv uosc colors)
+   - MIME defaults, environment variables, animations
+   - Keybinds and input preferences
+
+### Chezmoi File Types
+
+| Prefix/Pattern | Purpose |
+|---------------|---------|
+| `modify_` | Python script that merges keys into existing files (preserves user/runtime additions) |
+| `.tmpl` | Go template with hostname/user conditionals |
+| `executable_` | Installed with +x permission |
+| `private_` | Installed with restricted permissions |
+| `run_onchange_` | Shell script that re-runs when referenced content changes |
+| `run_after_` | Shell script that runs after every `chezmoi apply` |
+
+### Key Chezmoi Files
+
+| Source Path | Purpose |
+|-------------|---------|
+| `.package-list` | Package list (triggers install script re-run via hash) |
+| `run_onchange_install-packages.sh.tmpl` | Installs packages, icons, enables systemd units, rebuilds ksycoca |
+| `dot_config/niri/config.kdl.tmpl` | Niri config (templated: hardware rules conditional on hostname) |
+| `dot_config/vesktop/modify_settings.json` | Merges DMS splash colors into Vesktop |
+| `dot_config/vesktop/settings/modify_settings.json` | Merges theme + transparency into Vencord |
+| `dot_config/modify_mimeapps.list` | Merges MIME defaults without clobbering user additions |
+| `dot_claude/modify_settings.json` | Merges base permissions into Claude settings |
+| `private_CLAUDE.md.tmpl` | This file (hostname-conditional system context) |
+
+### After Making Changes
+
+```bash
+chezmoi diff    # Preview what would change
+chezmoi apply   # Apply to live system
+```
+
+Then commit and push the chezmoi repo so other machines get the update.
+
+---
+
 ## System Structure
 
 ### Machine
 - **Hostname:** {{ .chezmoi.hostname }}
 - **User:** {{ .chezmoi.username }}
-{{- if eq .chezmoi.hostname "Sushitop" }}
 - **OS:** CachyOS (Arch-based)
 - **Desktop:** Niri (scrollable tiling Wayland compositor)
-- **Dotfiles:** DMS dotfiles (Quickshell-based widgets, auto-generated niri config)
+- **Dotfiles:** DMS (Quickshell-based widgets, auto-generated niri config)
+- **Terminal:** Ghostty
+- **Shell:** fish (primary)
+{{- if eq .chezmoi.hostname "Sushitop" }}
 
 ### Storage Layout
 
 | Drive | Size | Mount | Label | Purpose |
 |-------|------|-------|-------|---------|
-| nvme1n1p2 | 892GB | `/` `/home` | (root) | System drive - OS, home directory |
-| nvme1n1p1 | 2GB | `/boot` | - | Boot partition |
-| nvme0n1p1 | 3.6TB | `/mnt/Tsukiji` | Tsukiji | Games & large files (Steam, ComfyUI, Modding) |
+| nvme1n1p2 | 892GB | `/` `/home` | (root) | System drive |
+| nvme0n1p1 | 3.6TB | `/mnt/Tsukiji` | Tsukiji | Games & large files |
 | nvme2n1p1 | 931GB | `/mnt/Noren` | Noren | AI projects & models |
-| USB | varies | `/run/media/{{ .chezmoi.username }}/*` | varies | Removable drives auto-mount here |
 
 ### Key Directories
 
 | Path | Purpose |
 |------|---------|
 | `{{ .chezmoi.homeDir }}/` | Home directory |
-| `{{ .chezmoi.homeDir }}/.claude-context/` | Claude context persistence system |
-| `/mnt/Tsukiji/` | Large storage - games, backups, media |
+| `{{ .chezmoi.homeDir }}/.claude-context/` | Claude context persistence |
+| `/mnt/Tsukiji/` | Games, backups, media |
 | `/mnt/Noren/AI/` | AI projects and models |
-| `/run/media/{{ .chezmoi.username }}/` | USB/removable drives mount here |
-
-### Desktop Environment
-- **Compositor:** Niri (scrollable tiling Wayland)
-- **Dotfiles:** DMS (Quickshell widgets, `~/.config/niri/dms/`)
-- **Terminal:** Ghostty (`~/.config/ghostty/`)
-- **Shell:** fish (primary), zsh and bash available
-- **Config location:** `~/.config/` (niri, ghostty, fish, quickshell, etc.)
 {{- else }}
-{{/* Laptop or other device — add sections as needed */}}
-- **OS:** Determine on first run
-- **Shell:** fish
 
 ### Key Directories
 
 | Path | Purpose |
 |------|---------|
 | `{{ .chezmoi.homeDir }}/` | Home directory |
+| `{{ .chezmoi.homeDir }}/Projects/` | Development projects |
+
+### Web Development
+- **Taskapp:** Next.js + Neon PostgreSQL + Vercel
+- Project CLAUDE.md in the git repo is authoritative for all code standards
+- MCP servers: Neon (database), Vercel (deployment), Figma (design)
+- Project settings: `~/.config/claude-project-configs/taskapp-settings.local.json`
 {{- end }}
 
 ---
-
-## Context System
-
-Check for active projects and context at:
-```
-~/.claude-context/
-```
-
-### Quick Commands
-
-- **List active projects:** `ls ~/.claude-context/projects/`
-- **Read project state:** `cat ~/.claude-context/projects/{name}/STATE.md`
-- **Update this file:** `~/.claude-context/update-claude-md.sh`
 {{- if eq .chezmoi.hostname "Sushitop" }}
 
 ## Active Projects
@@ -71,32 +116,19 @@ Check for active projects and context at:
 | Project | Status | Context Path |
 |---------|--------|--------------|
 | gaming-hdr-settings |  | `~/.claude-context/projects/gaming-hdr-settings/STATE.md` |
-| gaming-latency | READY - Reboot via Limine to activate all optimizations | `~/.claude-context/projects/gaming-latency/STATE.md` |
+| gaming-latency | READY | `~/.claude-context/projects/gaming-latency/STATE.md` |
 | greetd-dms |  | `~/.claude-context/projects/greetd-dms/STATE.md` |
-| latency-optimizations |  | `~/.claude-context/projects/latency-optimizations/STATE.md` |
-| mhwilds-5090-fix |  | `~/.claude-context/projects/mhwilds-5090-fix/STATE.md` |
-| mhwilds-hang |  | `~/.claude-context/projects/mhwilds-hang/STATE.md` |
 | mhwilds-modding |  | `~/.claude-context/projects/mhwilds-modding/STATE.md` |
-| nvidia-575-fix |  | `~/.claude-context/projects/nvidia-575-fix/STATE.md` |
-| portable-usb | IN PROGRESS - Waiting for restart to fix sudo | `~/.claude-context/projects/portable-usb/STATE.md` |
-| system-update |  | `~/.claude-context/projects/system-update/STATE.md` |
+
+Check `~/.claude-context/projects/` for full list and status.
 {{- end }}
-
-## On Session Start
-
-If resuming work, read the relevant STATE.md file for full context including:
-- What's been completed
-- What's in progress
-- Next steps
-- Important paths and commands
 
 ## User Preferences
 
 - User: {{ .chezmoi.username }}
-- Primary work directories: `{{ .chezmoi.homeDir }}/`
-- Context storage: `~/.claude-context/`
+- Primary work: `{{ .chezmoi.homeDir }}/`
+- Chezmoi source: `~/.local/share/chezmoi/`
 {{- if eq .chezmoi.hostname "Sushitop" }}
-- Large file storage: `/mnt/Tsukiji/`
-- AI/ML projects: `/mnt/Noren/AI/`
-- USB drives: `/run/media/{{ .chezmoi.username }}/`
+- Large storage: `/mnt/Tsukiji/`
+- AI/ML: `/mnt/Noren/AI/`
 {{- end }}

@@ -10,12 +10,14 @@ PACMAN_PKGS=(
     mpv
     okular
     qalculate-gtk
+    ttf-jetbrains-mono-nerd
 )
 
 AUR_PKGS=(
     millennium
     mpv-thumbfast-git
     mpv-uosc
+    vesktop
 )
 
 # Install missing pacman packages
@@ -60,5 +62,9 @@ if [[ ! -d "$HOME/.local/share/icons/Colloid-Dark" ]]; then
     "$tmpdir/colloid/install.sh" -d "$HOME/.local/share/icons"
     rm -rf "$tmpdir"
 fi
+
+# Enable DMS systemd user services (color watchers for starship/border gradient)
+systemctl --user enable --now dms-starship.path 2>/dev/null || true
+systemctl --user enable --now dms-border-gradient.path 2>/dev/null || true
 
 echo "Package setup complete."

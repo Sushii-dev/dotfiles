@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""Merge DMS-specific Vesktop app settings without clobbering runtime changes."""
+import json
+import sys
+
+DEFAULTS = {
+    "discordBranch": "stable",
+    "minimizeToTray": True,
+    "arRPC": True,
+    "splashColor": "rgb(194, 199, 206)",
+    "hardwareVideoAcceleration": True,
+    "enableSplashScreen": False,
+    "splashBackground": "rgba(16, 20, 24, 0.8)",
+}
+
+existing = sys.stdin.read().strip()
+if existing:
+    data = json.loads(existing)
+else:
+    data = {}
+
+for key, val in DEFAULTS.items():
+    data[key] = val
+
+print(json.dumps(data, indent=4))

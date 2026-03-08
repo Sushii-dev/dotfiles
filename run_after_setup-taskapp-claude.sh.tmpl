@@ -1,0 +1,33 @@
+#!/bin/bash
+# Deploy taskapp Claude project config if the repo exists.
+# Re-runs when config changes.
+# config hash: {{ include "dot_config/claude-project-configs/taskapp-settings.local.json" | sha256sum }}
+set -euo pipefail
+
+TASKAPP_DIR="{{ .chezmoi.homeDir }}/Projects/taskapp"
+CONFIG_SRC="{{ .chezmoi.homeDir }}/.config/claude-project-configs"
+
+# Only deploy if taskapp repo is cloned
+if [[ ! -d "$TASKAPP_DIR" ]]; then
+    exit 0
+fi
+
+# Deploy project-level .claude/settings.local.json
+mkdir -p "$TASKAPP_DIR/.claude"
+if [[ ! -f "$TASKAPP_DIR/.claude/settings.local.json" ]]; then
+    cp "$CONFIG_SRC/taskapp-settings.local.json" "$TASKAPP_DIR/.claude/settings.local.json"
+    echo "Deployed taskapp .claude/settings.local.json"
+fi
+
+# Deploy project memories to the correct path-encoded directory
+ENCODED_PATH=$(echo "$TASKAPP_DIR" | sed 's|^/||; s|/|-|g')
+MEMORY_DIR="{{ .chezmoi.homeDir }}/.claude/projects/-${ENCODED_PATH}/memory"
+mkdir -p "$MEMORY_DIR"
+
+for f in "$CONFIG_SRC/taskapp-memory/"*.md; do
+    fname=$(basename "$f")
+    if [[ ! -f "$MEMORY_DIR/$fname" ]]; then
+        cp "$f" "$MEMORY_DIR/$fname"
+        echo "Deployed taskapp memory: $fname"
+    fi
+done
