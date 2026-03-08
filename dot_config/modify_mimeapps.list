@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+"""Merge default application associations into mimeapps.list.
+
+Reads existing mimeapps.list from stdin, ensures our defaults are set,
+prints result to stdout. User additions from 'Open With' dialogs are preserved.
+"""
+import sys
+
+DEFAULTS = {
+    # File manager
+    "inode/directory": "org.kde.dolphin.desktop",
+    # Browser
+    "x-scheme-handler/http": "firefox.desktop",
+    "x-scheme-handler/https": "firefox.desktop",
+    "x-scheme-handler/about": "helium.desktop",
+    "x-scheme-handler/unknown": "helium.desktop",
+    "text/html": "firefox.desktop",
+    # Images — Loupe
+    "image/jpeg": "org.gnome.Loupe.desktop",
+    "image/png": "org.gnome.Loupe.desktop",
+    "image/gif": "org.gnome.Loupe.desktop",
+    "image/webp": "org.gnome.Loupe.desktop",
+    "image/tiff": "org.gnome.Loupe.desktop",
+    "image/bmp": "org.gnome.Loupe.desktop",
+    "image/svg+xml": "org.gnome.Loupe.desktop",
+    "image/svg+xml-compressed": "org.gnome.Loupe.desktop",
+    "image/avif": "org.gnome.Loupe.desktop",
+    "image/heic": "org.gnome.Loupe.desktop",
+    "image/jxl": "org.gnome.Loupe.desktop",
+    "image/vnd.microsoft.icon": "org.gnome.Loupe.desktop",
+    "image/x-tga": "org.gnome.Loupe.desktop",
+    # Documents — Okular
+    "application/pdf": "okularApplication_pdf.desktop",
+    "application/epub+zip": "okularApplication_epub.desktop",
+    "application/x-cbz": "okularApplication_comicbook.desktop",
+    "application/x-cbr": "okularApplication_comicbook.desktop",
+    "application/x-cbt": "okularApplication_comicbook.desktop",
+    "application/x-cb7": "okularApplication_comicbook.desktop",
+    "image/vnd.djvu": "okularApplication_djvu.desktop",
+    "application/x-mobipocket-ebook": "okularApplication_mobi.desktop",
+    "text/markdown": "okularApplication_md.desktop",
+    # Archives — Ark
+    "application/zip": "org.kde.ark.desktop",
+    "application/gzip": "org.kde.ark.desktop",
+    "application/x-tar": "org.kde.ark.desktop",
+    "application/x-compressed-tar": "org.kde.ark.desktop",
+    "application/x-bzip-compressed-tar": "org.kde.ark.desktop",
+    "application/x-xz-compressed-tar": "org.kde.ark.desktop",
+    "application/x-lzip-compressed-tar": "org.kde.ark.desktop",
+    "application/x-lzma-compressed-tar": "org.kde.ark.desktop",
+    "application/x-gzip-compressed-tar": "org.kde.ark.desktop",
+    "application/x-7z-compressed": "org.kde.ark.desktop",
+    "application/vnd.rar": "org.kde.ark.desktop",
+    "application/x-rar": "org.kde.ark.desktop",
+    "application/x-rar-compressed": "org.kde.ark.desktop",
+    "application/x-zip": "org.kde.ark.desktop",
+    "application/x-zip-compressed": "org.kde.ark.desktop",
+    # Video — mpv
+    "video/mp4": "mpv.desktop",
+    "video/x-matroska": "mpv.desktop",
+    "video/mkv": "mpv.desktop",
+    "video/webm": "mpv.desktop",
+    "video/mpeg": "mpv.desktop",
+    "video/ogg": "mpv.desktop",
+    "video/quicktime": "mpv.desktop",
+    "video/x-msvideo": "mpv.desktop",
+    "video/x-flv": "mpv.desktop",
+    "video/avi": "mpv.desktop",
+    "video/3gpp": "mpv.desktop",
+    "video/3gpp2": "mpv.desktop",
+    "video/mp2t": "mpv.desktop",
+    "video/x-m4v": "mpv.desktop",
+    # Audio — mpv
+    "audio/mpeg": "mpv.desktop",
+    "audio/mp3": "mpv.desktop",
+    "audio/flac": "mpv.desktop",
+    "audio/ogg": "mpv.desktop",
+    "audio/wav": "mpv.desktop",
+    "audio/x-wav": "mpv.desktop",
+    "audio/mp4": "mpv.desktop",
+    "audio/aac": "mpv.desktop",
+    "audio/opus": "mpv.desktop",
+    "audio/webm": "mpv.desktop",
+    "audio/x-m4a": "mpv.desktop",
+    "audio/x-matroska": "mpv.desktop",
+    "audio/vorbis": "mpv.desktop",
+    "audio/x-vorbis+ogg": "mpv.desktop",
+}
+
+existing = sys.stdin.read()
+lines = existing.splitlines()
+output = list(lines)
+
+# Find [Default Applications] section
+section_idx = None
+next_section_idx = None
+for i, line in enumerate(output):
+    if line.strip() == "[Default Applications]":
+        section_idx = i
+    elif section_idx is not None and line.strip().startswith("[") and i > section_idx:
+        next_section_idx = i
+        break
+
+if section_idx is None:
+    output.append("")
+    output.append("[Default Applications]")
+    for mime, app in DEFAULTS.items():
+        output.append(f"{mime}={app}")
+else:
+    insert_at = next_section_idx if next_section_idx else len(output)
+    for mime, app in DEFAULTS.items():
+        found = False
+        for i in range(section_idx + 1, insert_at):
+            if output[i].split("=")[0].strip() == mime:
+                output[i] = f"{mime}={app}"
+                found = True
+                break
+        if not found:
+            output.insert(insert_at, f"{mime}={app}")
+            insert_at += 1
+
+print("\n".join(output))
