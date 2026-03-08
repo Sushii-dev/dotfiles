@@ -187,7 +187,10 @@ overview {
 // This line starts waybar, a commonly used bar for Wayland compositors.
 environment {
   XDG_CURRENT_DESKTOP "niri"
+  QT_QPA_PLATFORMTHEME "kde"
 }
+// Propagate Qt theme to DBus-activated services (portals, etc.)
+spawn-at-startup "sh" "-c" "dbus-update-activation-environment --systemd QT_QPA_PLATFORMTHEME=kde"
 hotkey-overlay {
     skip-at-startup
 }
@@ -225,6 +228,14 @@ animations {
         spring damping-ratio=0.85 stiffness=800 epsilon=0.0001
     }
 }
+// Workspaces on main monitor
+workspace "main" {
+    open-on-output "DP-2"
+}
+workspace "games" {
+    open-on-output "DP-2"
+}
+
 // Window rules let you adjust behavior for individual windows.
 // Find more information on the wiki:
 // https://github.com/YaLTeR/niri/wiki/Configuration:-Window-Rules
@@ -258,10 +269,24 @@ window-rule {
     match app-id=r#"^xdg-desktop-portal$"#
     open-floating true
 }
+// Steam translucency (combined with Millennium CSS for true transparency)
+window-rule {
+    match app-id=r#"^steam$"#
+    opacity 0.88
+}
 window-rule {
     match app-id=r#"^steam$"# title=r#"^notificationtoasts_\d+_desktop$"#
     default-floating-position x=10 y=10 relative-to="bottom-right"
     open-focused false
+}
+// Steam popups (friends, settings, etc.) float centered; main client tiles
+window-rule {
+    match app-id=r#"^steam$"#
+    exclude title=r#"^Steam$"#
+    exclude title=r#"^notificationtoasts_\d+_desktop$"#
+    open-floating true
+    border { off; }
+    focus-ring { off; }
 }
 window-rule {
     match app-id=r#"^org\.wezfurlong\.wezterm$"#
@@ -275,6 +300,29 @@ window-rule {
     match app-id=r#"firefox$"# title="^Picture-in-Picture$"
     match app-id="zoom"
     open-floating true
+}
+// Games open on "games" workspace on main monitor
+window-rule {
+    match app-id="gamescope"
+    open-on-workspace "games"
+    open-on-output "DP-2"
+}
+window-rule {
+    match app-id=r#"^steam_app_"#
+    open-on-workspace "games"
+    open-on-output "DP-2"
+}
+// Vesktop on portrait monitor, bottom half
+window-rule {
+    match app-id="vesktop"
+    open-on-output "DP-1"
+    default-column-width { proportion 1.0; }
+    default-window-height { proportion 0.5; }
+}
+// Dolphin translucency
+window-rule {
+    match app-id="org.kde.dolphin"
+    opacity 0.90
 }
 // Open dms windows as floating by default
 window-rule {
@@ -305,3 +353,4 @@ include "dms/cursor.kdl"
 
 
 include "dms/windowrules.kdl"
+

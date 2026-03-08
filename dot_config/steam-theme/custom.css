@@ -1,0 +1,81 @@
+/* --------------------------------- */
+/* --- DMS Dankcolors Custom CSS --- */
+/* --------------------------------- */
+
+/* Override accent and window colors to match DMS Material You palette */
+:root
+{
+	/* Primary accent: #99ccfa */
+	--adw-accent-bg-rgb: 153, 204, 250 !important;
+	--adw-accent-fg-rgb: 0, 51, 81 !important;
+	--adw-accent-rgb: 153, 204, 250 !important;
+
+	/* Error: #ffb4ab */
+	--adw-error-bg-rgb: 255, 180, 171 !important;
+	--adw-error-fg-rgb: 0, 51, 81 !important;
+	--adw-error-rgb: 255, 180, 171 !important;
+
+	/* Success: #7dfa8d (dank16 green) */
+	--adw-success-bg-rgb: 125, 250, 141 !important;
+	--adw-success-fg-rgb: 0, 0, 0 !important;
+	--adw-success-rgb: 125, 250, 141 !important;
+
+	/* Warning: #fff772 (dank16 yellow) */
+	--adw-warning-bg-rgb: 255, 247, 114 !important;
+	--adw-warning-fg-rgb: 0, 0, 0 !important;
+	--adw-warning-rgb: 255, 247, 114 !important;
+
+	/* Window: background #101418, text #e0e2e8 */
+	--adw-window-bg-rgb: 16, 20, 24 !important;
+	--adw-window-fg-rgb: 224, 226, 232 !important;
+
+	/* Views: same as background */
+	--adw-view-bg-rgb: 16, 20, 24 !important;
+	--adw-view-fg-rgb: 224, 226, 232 !important;
+
+	/* Header bar: surface_container_high #1c2024 */
+	--adw-headerbar-bg-rgb: 28, 32, 36 !important;
+	--adw-headerbar-fg-rgb: 224, 226, 232 !important;
+	--adw-headerbar-border-rgb: 194, 199, 206 !important;
+	--adw-headerbar-backdrop-rgb: 28, 32, 36 !important;
+
+	/* Sidebar: surface_container_low #181c20 */
+	--adw-sidebar-bg-rgb: 24, 28, 32 !important;
+	--adw-sidebar-fg-rgb: 224, 226, 232 !important;
+	--adw-sidebar-backdrop-rgb: 24, 28, 32 !important;
+
+	--adw-secondary-sidebar-bg-rgb: 24, 28, 32 !important;
+	--adw-secondary-sidebar-fg-rgb: 224, 226, 232 !important;
+	--adw-secondary-sidebar-backdrop-rgb: 24, 28, 32 !important;
+
+	/* Cards: subtle white overlay */
+	--adw-card-bg-rgb: 255, 255, 255 !important;
+	--adw-card-bg-a: 0.06 !important;
+	--adw-card-fg-rgb: 224, 226, 232 !important;
+
+	/* Dialogs: surface_container_high */
+	--adw-dialog-bg-rgb: 28, 32, 36 !important;
+	--adw-dialog-fg-rgb: 224, 226, 232 !important;
+
+	/* Popovers */
+	--adw-popover-bg-rgb: 28, 32, 36 !important;
+	--adw-popover-fg-rgb: 224, 226, 232 !important;
+
+	/* Thumbnails */
+	--adw-thumbnail-bg-rgb: 16, 20, 24 !important;
+}
+
+/* Font override - match terminal */
+* {
+	font-family: 'JetBrains Mono', 'Inter', sans-serif !important;
+}
+
+/* Translucent backgrounds for niri compositor opacity */
+.library_AppDetailsTransitionGroup_2VBZC,
+.libraryhome_Container_1orKJ {
+	background-color: rgba(16, 20, 24, 0.7) !important;
+}
+
+.gamelistbar_GameListBar_1zzWJ {
+	background-color: rgba(24, 28, 32, 0.6) !important;
+}

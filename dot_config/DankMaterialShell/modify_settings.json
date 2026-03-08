@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""Merge niri layout overrides into DMS settings.json.
+
+Reads existing settings from stdin (chezmoi passes current file contents),
+merges our override keys, and prints the result to stdout.
+DMS manages most of this file — we only force specific keys.
+"""
+import json
+import sys
+
+# Keys we want to enforce
+OVERRIDES = {
+    "niriLayoutGapsOverride": 8,
+    "niriLayoutRadiusOverride": 8,
+    "niriLayoutBorderSize": 1,
+}
+
+existing = sys.stdin.read().strip()
+if existing:
+    data = json.loads(existing)
+else:
+    data = {}
+
+data.update(OVERRIDES)
+print(json.dumps(data, indent=2))

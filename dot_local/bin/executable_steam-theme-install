@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Reinstall Adwaita-for-Steam with dankcolors custom CSS.
+# Run after Steam updates reset the steamui/ directory.
+set -euo pipefail
+
+STEAM_UI="$HOME/.steam/steam/steamui"
+CUSTOM_CSS="$HOME/.config/steam-theme/custom.css"
+REPO_URL="https://github.com/tkashkin/Adwaita-for-Steam.git"
+TMPDIR="$(mktemp -d)"
+
+trap 'rm -rf "$TMPDIR"' EXIT
+
+if [[ ! -d "$STEAM_UI" ]]; then
+    echo "ERROR: Steam UI directory not found at $STEAM_UI"
+    echo "       Is Steam installed?"
+    exit 1
+fi
+
+echo "==> Cloning Adwaita-for-Steam..."
+git clone --depth 1 "$REPO_URL" "$TMPDIR/Adwaita-for-Steam"
+
+echo "==> Installing tokyo-night theme with custom CSS support..."
+cd "$TMPDIR/Adwaita-for-Steam"
+python install.py -c tokyo-night --custom-css
+
+if [[ -f "$CUSTOM_CSS" ]]; then
+    echo "==> Applying dankcolors custom CSS..."
+    cp "$CUSTOM_CSS" "$STEAM_UI/adwaita/custom/custom.css"
+else
+    echo "WARNING: Custom CSS not found at $CUSTOM_CSS"
+    echo "         Run 'chezmoi apply' first to deploy it."
+fi
+
+echo "==> Done! Restart Steam to see changes."
