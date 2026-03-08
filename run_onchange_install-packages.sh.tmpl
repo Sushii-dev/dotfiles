@@ -1,0 +1,64 @@
+#!/bin/bash
+# Install required packages. Re-runs when .package-list changes.
+# .package-list hash: {{ include ".package-list" | sha256sum }}
+set -euo pipefail
+
+PACMAN_PKGS=(
+    archlinux-xdg-menu
+    ark
+    loupe
+    mpv
+    okular
+    qalculate-gtk
+)
+
+AUR_PKGS=(
+    millennium
+    mpv-thumbfast-git
+    mpv-uosc
+)
+
+# Install missing pacman packages
+missing=()
+for pkg in "${PACMAN_PKGS[@]}"; do
+    if ! pacman -Qq "$pkg" &>/dev/null; then
+        missing+=("$pkg")
+    fi
+done
+if [[ ${#missing[@]} -gt 0 ]]; then
+    echo "Installing pacman packages: ${missing[*]}"
+    sudo pacman -S --noconfirm --needed "${missing[@]}"
+fi
+
+# Install missing AUR packages (requires paru)
+if command -v paru &>/dev/null; then
+    aur_missing=()
+    for pkg in "${AUR_PKGS[@]}"; do
+        if ! pacman -Qq "$pkg" &>/dev/null; then
+            aur_missing+=("$pkg")
+        fi
+    done
+    if [[ ${#aur_missing[@]} -gt 0 ]]; then
+        echo "Installing AUR packages: ${aur_missing[*]}"
+        paru -S --noconfirm --needed "${aur_missing[@]}"
+    fi
+else
+    echo "WARNING: paru not found, skipping AUR packages"
+fi
+
+# Rebuild ksycoca cache (needed for KDE app discovery on non-Plasma desktops)
+if command -v kbuildsycoca6 &>/dev/null; then
+    echo "Rebuilding ksycoca cache..."
+    XDG_MENU_PREFIX=arch- kbuildsycoca6 --noincremental 2>/dev/null || true
+fi
+
+# Install Colloid icon theme if missing
+if [[ ! -d "$HOME/.local/share/icons/Colloid-Dark" ]]; then
+    echo "Installing Colloid icon theme..."
+    tmpdir=$(mktemp -d)
+    git clone --depth 1 https://github.com/vinceliuice/Colloid-icon-theme.git "$tmpdir/colloid"
+    "$tmpdir/colloid/install.sh" -d "$HOME/.local/share/icons"
+    rm -rf "$tmpdir"
+fi
+
+echo "Package setup complete."

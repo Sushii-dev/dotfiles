@@ -1,0 +1,12 @@
+# Pacman packages
+archlinux-xdg-menu
+ark
+loupe
+mpv
+okular
+qalculate-gtk
+
+# AUR packages (installed via paru)
+millennium
+mpv-thumbfast-git
+mpv-uosc
