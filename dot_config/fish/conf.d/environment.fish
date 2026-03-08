@@ -2,7 +2,7 @@
 set -gx EDITOR nvim
 set -gx VISUAL nvim
 set -gx GIT_EDITOR nvim
-set -gx TERMINAL ghostty
+# TERMINAL is set by 90-dms.conf (currently kitty)
 
 # bat
 set -gx BAT_THEME "Coldark-Dark"

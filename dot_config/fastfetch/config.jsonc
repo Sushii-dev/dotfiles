@@ -1,0 +1,65 @@
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/master/doc/json_schema.json",
+  "logo": {
+    "source": "~/.config/fastfetch/images/fastfetch.png",
+    "type": "kitty",
+    "height": 16,
+    "printRemaining": false
+  },
+  "separator": "  ",
+  "keyType": "icon",
+  "modules": [
+    "title",
+    "separator",
+
+    // ── Hardware ──
+    {
+      "type": "custom",
+      "format": "\u001b[38;2;240;120;160m── Hardware ──────────────────────\u001b[0m"
+    },
+    {
+      "type": "command",
+      "key": "CPU",
+      "keyColor": "magenta",
+      "text": "~/.local/bin/cpu-info.sh"
+    },
+    {
+      "type": "command",
+      "key": "GPU",
+      "keyColor": "magenta",
+      "text": "~/.local/bin/gpu-info.sh"
+    },
+    {
+      "type": "command",
+      "key": "RAM",
+      "keyColor": "magenta",
+      "text": "~/.local/bin/ram-info.sh"
+    },
+
+    // ── System ──
+    {
+      "type": "custom",
+      "format": "\u001b[38;2;144;96;232m── System ───────────────────────\u001b[0m"
+    },
+    "os",
+    "kernel",
+    "uptime",
+
+    // ── Desktop ──
+    {
+      "type": "custom",
+      "format": "\u001b[38;2;126;185;237m── Desktop ──────────────────────\u001b[0m"
+    },
+    "wm",
+    "shell",
+    "terminal",
+
+    // ── Network ──
+    {
+      "type": "custom",
+      "format": "\u001b[38;2;153;204;250m── Network ──────────────────────\u001b[0m"
+    },
+    "localip",
+
+  ]
+}
