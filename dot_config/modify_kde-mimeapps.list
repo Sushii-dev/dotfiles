@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""Merge default app associations into kde-mimeapps.list.
+
+KDE apps (Dolphin, etc.) check this file before the generic mimeapps.list.
+The system-level kde-mimeapps.list points to gwenview/elisa which aren't
+installed, so we override with our actual apps.
+"""
+import sys
+
+DEFAULTS = {
+    # Images — Loupe
+    "image/jpeg": "org.gnome.Loupe.desktop",
+    "image/png": "org.gnome.Loupe.desktop",
+    "image/gif": "org.gnome.Loupe.desktop",
+    "image/webp": "org.gnome.Loupe.desktop",
+    "image/tiff": "org.gnome.Loupe.desktop",
+    "image/bmp": "org.gnome.Loupe.desktop",
+    "image/svg+xml": "org.gnome.Loupe.desktop",
+    "image/svg+xml-compressed": "org.gnome.Loupe.desktop",
+    "image/avif": "org.gnome.Loupe.desktop",
+    "image/heic": "org.gnome.Loupe.desktop",
+    "image/heif": "org.gnome.Loupe.desktop",
+    "image/jxl": "org.gnome.Loupe.desktop",
+    "image/vnd.microsoft.icon": "org.gnome.Loupe.desktop",
+    "image/x-tga": "org.gnome.Loupe.desktop",
+    "image/x-ico": "org.gnome.Loupe.desktop",
+    "image/x-icns": "org.gnome.Loupe.desktop",
+    "image/x-webp": "org.gnome.Loupe.desktop",
+    "image/x-eps": "org.gnome.Loupe.desktop",
+    "image/x-portable-bitmap": "org.gnome.Loupe.desktop",
+    "image/x-portable-graymap": "org.gnome.Loupe.desktop",
+    "image/x-portable-pixmap": "org.gnome.Loupe.desktop",
+    "image/x-xbitmap": "org.gnome.Loupe.desktop",
+    "image/x-xpixmap": "org.gnome.Loupe.desktop",
+    "image/x-psd": "org.gnome.Loupe.desktop",
+    # Video — mpv
+    "video/mp4": "mpv.desktop",
+    "video/x-matroska": "mpv.desktop",
+    "video/mkv": "mpv.desktop",
+    "video/webm": "mpv.desktop",
+    "video/mpeg": "mpv.desktop",
+    "video/ogg": "mpv.desktop",
+    "video/quicktime": "mpv.desktop",
+    "video/x-msvideo": "mpv.desktop",
+    "video/x-flv": "mpv.desktop",
+    "video/avi": "mpv.desktop",
+    "video/3gpp": "mpv.desktop",
+    "video/3gpp2": "mpv.desktop",
+    "video/mp2t": "mpv.desktop",
+    "video/x-m4v": "mpv.desktop",
+    # Audio — mpv
+    "audio/aac": "mpv.desktop",
+    "audio/mp4": "mpv.desktop",
+    "audio/mpeg": "mpv.desktop",
+    "audio/mpegurl": "mpv.desktop",
+    "audio/ogg": "mpv.desktop",
+    "audio/vnd.rn-realaudio": "mpv.desktop",
+    "audio/vorbis": "mpv.desktop",
+    "audio/x-flac": "mpv.desktop",
+    "audio/x-mp3": "mpv.desktop",
+    "audio/x-mpegurl": "mpv.desktop",
+    "audio/x-ms-wma": "mpv.desktop",
+    "audio/x-musepack": "mpv.desktop",
+    "audio/x-oggflac": "mpv.desktop",
+    "audio/x-pn-realaudio": "mpv.desktop",
+    "audio/x-scpls": "mpv.desktop",
+    "audio/x-speex": "mpv.desktop",
+    "audio/x-vorbis": "mpv.desktop",
+    "audio/x-vorbis+ogg": "mpv.desktop",
+    "audio/x-wav": "mpv.desktop",
+    "audio/flac": "mpv.desktop",
+    "audio/mp3": "mpv.desktop",
+    "audio/wav": "mpv.desktop",
+    "audio/opus": "mpv.desktop",
+    "audio/webm": "mpv.desktop",
+    "audio/x-m4a": "mpv.desktop",
+    "audio/x-matroska": "mpv.desktop",
+}
+
+existing = sys.stdin.read()
+lines = existing.splitlines()
+output = list(lines)
+
+section_idx = None
+next_section_idx = None
+for i, line in enumerate(output):
+    if line.strip() == "[Default Applications]":
+        section_idx = i
+    elif section_idx is not None and line.strip().startswith("[") and i > section_idx:
+        next_section_idx = i
+        break
+
+if section_idx is None:
+    output.append("")
+    output.append("[Default Applications]")
+    for mime, app in DEFAULTS.items():
+        output.append(f"{mime}={app}")
+else:
+    insert_at = next_section_idx if next_section_idx else len(output)
+    for mime, app in DEFAULTS.items():
+        found = False
+        for i in range(section_idx + 1, insert_at):
+            if output[i].split("=")[0].strip() == mime:
+                output[i] = f"{mime}={app}"
+                found = True
+                break
+        if not found:
+            output.insert(insert_at, f"{mime}={app}")
+            insert_at += 1
+
+print("\n".join(output))
