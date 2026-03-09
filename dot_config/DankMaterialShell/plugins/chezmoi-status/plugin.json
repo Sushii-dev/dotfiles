@@ -1,0 +1,16 @@
+{
+    "id": "chezmoiStatus",
+    "name": "Chezmoi Status",
+    "description": "Shows chezmoi sync status and allows one-click updates",
+    "version": "1.0.0",
+    "author": "sushii",
+    "icon": "sync",
+    "component": "./ChezmoiStatus.qml",
+    "settings": "./ChezmoiStatusSettings.qml",
+    "requires": ["chezmoi"],
+    "permissions": [
+        "settings_read",
+        "settings_write",
+        "process"
+    ]
+}
