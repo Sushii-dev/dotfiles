@@ -1,4 +1,5 @@
-source /usr/share/cachyos-fish-config/cachyos-config.fish
+# CachyOS fish config (may not exist on all systems)
+test -f /usr/share/cachyos-fish-config/cachyos-config.fish && source /usr/share/cachyos-fish-config/cachyos-config.fish
 
 # Tool initialization (order matters)
 zoxide init fish --cmd cd | source
