@@ -96,7 +96,7 @@ Then commit and push the chezmoi repo so other machines get the update.
 | `{{ .chezmoi.homeDir }}/.claude-context/` | Claude context persistence |
 | `/mnt/Tsukiji/` | Games, backups, media |
 | `/mnt/Noren/AI/` | AI projects and models |
-{{- else }}
+{{- else if eq .chezmoi.hostname "Sushilap" }}
 
 ### Key Directories
 
@@ -110,6 +110,13 @@ Then commit and push the chezmoi repo so other machines get the update.
 - Project CLAUDE.md in the git repo is authoritative for all code standards
 - MCP servers: Neon (database), Vercel (deployment), Figma (design)
 - Project settings: `~/.config/claude-project-configs/taskapp-settings.local.json`
+{{- else }}
+
+### Key Directories
+
+| Path | Purpose |
+|------|---------|
+| `{{ .chezmoi.homeDir }}/` | Home directory |
 {{- end }}
 
 ---
