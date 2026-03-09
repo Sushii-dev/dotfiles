@@ -1,0 +1,139 @@
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+  "logo": {
+    "source": "~/.config/fastfetch/logo.png",
+    "padding": { "top": 1, "left": 1, "right": 3 },
+    "printRemaining": false
+  },
+  "display": {
+    "separator": " : ",
+    "key": { "width": 10 },
+    "color": {
+      "output": "#e0e2e8",
+      "separator": "#8c9198"
+    },
+    "brightColor": false
+  },
+  "modules": [
+    {
+      "type": "title",
+      "color": {
+        "user": "#99ccfa",
+        "at": "#8c9198",
+        "host": "#d2bfe7"
+      }
+    },
+    "break",
+    {
+      "type": "custom",
+      "format": "{##8c9198}┌──────────────────────Hardware──────────────────────┐{#}"
+    },
+    {
+      "type": "command",
+      "key": "󰌢 PC",
+      "keyColor": "#ff729d",
+      "text": "hostname"
+    },
+    {
+      "type": "cpu",
+      "key": "│ ├󰍹",
+      "keyColor": "#ff729d",
+      "format": "{name} @ {freq-max}",
+      "temp": true
+    },
+    {
+      "type": "gpu",
+      "key": "│ ├󰍛",
+      "keyColor": "#ff729d",
+      "format": "{name} [{type}]",
+      "temp": true,
+      "driverSpecific": true
+    },
+    {
+      "type": "memory",
+      "key": "│ ├󰑹",
+      "keyColor": "#ff729d",
+      "format": "{used} / {total} ({percentage})"
+    },
+    {
+      "type": "disk",
+      "key": "└ └󰋊",
+      "keyColor": "#ff729d",
+      "format": "{size-used} / {size-total} ({size-percentage}) - {filesystem}"
+    },
+    {
+      "type": "custom",
+      "format": "{##8c9198}└────────────────────────────────────────────────────┘{#}"
+    },
+    "break",
+    {
+      "type": "custom",
+      "format": "{##8c9198}┌──────────────────────Software──────────────────────┐{#}"
+    },
+    {
+      "type": "os",
+      "key": "󰌽 OS",
+      "keyColor": "#d2bfe7"
+    },
+    {
+      "type": "kernel",
+      "key": "│ ├󰒓",
+      "keyColor": "#d2bfe7"
+    },
+    {
+      "type": "packages",
+      "key": "│ ├󰏖",
+      "keyColor": "#d2bfe7"
+    },
+    {
+      "type": "shell",
+      "key": "└ └󰆍",
+      "keyColor": "#d2bfe7"
+    },
+    "break",
+    {
+      "type": "wm",
+      "key": "󰖄 WM",
+      "keyColor": "#99ccfa"
+    },
+    {
+      "type": "terminal",
+      "key": "│ ├󰆍",
+      "keyColor": "#99ccfa"
+    },
+    {
+      "type": "terminalfont",
+      "key": "└ └󰛖",
+      "keyColor": "#99ccfa"
+    },
+    {
+      "type": "custom",
+      "format": "{##8c9198}└────────────────────────────────────────────────────┘{#}"
+    },
+    "break",
+    {
+      "type": "custom",
+      "format": "{##8c9198}┌────────────────────Uptime / Net────────────────────┐{#}"
+    },
+    {
+      "type": "uptime",
+      "key": "󰅐 Uptime",
+      "keyColor": "#b8c8da"
+    },
+    {
+      "type": "localip",
+      "key": "└ └󰈀",
+      "keyColor": "#b8c8da"
+    },
+    {
+      "type": "custom",
+      "format": "{##8c9198}└────────────────────────────────────────────────────┘{#}"
+    },
+    "break",
+    {
+      "type": "colors",
+      "paddingLeft": 2,
+      "symbol": "circle"
+    }
+  ]
+}
