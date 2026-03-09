@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Run fastfetch with logo height dynamically matched to output line count.
+# Uses "kitty" logo type so only height is needed — aspect ratio is auto-preserved.
+
+lines=$(fastfetch --logo none --pipe "$@" 2>/dev/null | wc -l)
+lines=${lines// /}
+[[ -z "$lines" || "$lines" -lt 1 ]] && lines=18
+
+# Subtract 1 for breathing room so logo doesn't push into the prompt
+height=$((lines - 1))
+[[ "$height" -lt 3 ]] && height=3
+
+exec fastfetch --logo-height "$height" "$@"

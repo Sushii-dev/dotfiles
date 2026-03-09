@@ -1,2 +1,2 @@
-{{colors.tertiary.default.hex}}
+{{colors.error.default.hex}}
 {{colors.primary.default.hex}}

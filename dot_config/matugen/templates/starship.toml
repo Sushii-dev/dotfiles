@@ -1,15 +1,15 @@
 "$schema" = 'https://starship.rs/config-schema.json'
 
 format = """
-[](red)\
+[](red)\
 $os\
 $username\
-[](bg:peach fg:red)\
+[](bg:peach fg:red)\
 $directory\
-[](bg:yellow fg:peach)\
+[](bg:yellow fg:peach)\
 $git_branch\
 $git_status\
-[](fg:yellow bg:green)\
+[](fg:yellow bg:green)\
 $c\
 $rust\
 $golang\
@@ -19,11 +19,11 @@ $java\
 $kotlin\
 $haskell\
 $python\
-[](fg:green bg:sapphire)\
+[](fg:green bg:sapphire)\
 $conda\
-[](fg:sapphire bg:lavender)\
+[](fg:sapphire bg:lavender)\
 $time\
-[ ](fg:lavender)\
+[ ](fg:lavender)\
 $cmd_duration\
 $line_break\
 $character"""
@@ -173,8 +173,8 @@ red = "{{colors.primary.default.hex}}"
 peach = "{{dank16.color4.default.hex}}"
 yellow = "{{colors.secondary_container.default.hex}}"
 green = "{{dank16.color5.default.hex}}"
-sapphire = "{{colors.surface.default.hex}}"
-lavender = "{{colors.background.default.hex}}"
+sapphire = "{{colors.surface_container_highest.default.hex}}"
+lavender = "{{colors.surface_container_high.default.hex}}"
 
 # Text colors
 crust = "{{colors.background.default.hex}}"
