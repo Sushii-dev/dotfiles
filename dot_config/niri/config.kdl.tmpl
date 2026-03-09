@@ -124,11 +124,9 @@ layout {
     //
     // Alternatively, you can override it with a window rule called
     // `draw-border-with-background`.
+    // Border colors are set dynamically by DMS via include "dms/colors.kdl"
     border {
         width 4
-        active-gradient from="#ff729d" to="#99ccfa" angle=45 relative-to="window"
-        inactive-color "#d0d0d0"      // Light gray
-        urgent-color   "#cc4444"      // Softer red
     }
     shadow {
         softness 30

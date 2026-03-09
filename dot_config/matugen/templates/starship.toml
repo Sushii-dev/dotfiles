@@ -1,113 +1,186 @@
 "$schema" = 'https://starship.rs/config-schema.json'
 
-palette = "dankcolors"
-
 format = """
-[░▒▓](icon_bg)\
+[](red)\
 $os\
-[](bg:dir_bg fg:icon_bg)\
+$username\
+[](bg:peach fg:red)\
 $directory\
-[](fg:dir_bg bg:git_bg)\
+[](bg:yellow fg:peach)\
 $git_branch\
 $git_status\
-[](fg:git_bg bg:lang_bg)\
+[](fg:yellow bg:green)\
 $c\
-$python\
 $rust\
 $golang\
 $nodejs\
+$php\
 $java\
-[](fg:lang_bg bg:time_bg)\
+$kotlin\
+$haskell\
+$python\
+[](fg:green bg:sapphire)\
+$conda\
+[](fg:sapphire bg:lavender)\
 $time\
-[ ](fg:time_bg)\
+[ ](fg:lavender)\
 $cmd_duration\
-\n$character"""
+$line_break\
+$character"""
 
-[palettes.dankcolors]
-icon_bg = "{{colors.primary.default.hex}}"
-dir_bg = "{{dank16.color4.default.hex}}"
-git_bg = "{{colors.secondary_container.default.hex}}"
-lang_bg = "{{dank16.color5.default.hex}}"
-time_bg = "{{colors.background.default.hex}}"
-text = "{{colors.on_surface.default.hex}}"
-dark_text = "{{colors.background.default.hex}}"
-accent = "{{colors.primary.default.hex}}"
-dimmed = "{{colors.outline.default.hex}}"
-error = "{{colors.error.default.hex}}"
-success = "{{dank16.color2.default.hex}}"
-warning = "{{dank16.color3.default.hex}}"
+palette = 'dankcolors'
 
 [os]
-style = "bold fg:dark_text bg:icon_bg"
 disabled = false
+style = "bg:red fg:crust"
 
 [os.symbols]
-Arch = "🍣 "
-CachyOS = "🍣 "
-Linux = "🍣 "
+Windows = ""
+Ubuntu = "󰕈"
+SUSE = ""
+Raspbian = "󰐿"
+Mint = "󰣭"
+Macos = "󰀵"
+Manjaro = ""
+Linux = "󰌽"
+Gentoo = "󰣨"
+Fedora = "󰣛"
+Alpine = ""
+Amazon = ""
+Android = ""
+AOSC = ""
+Arch = "󰣇"
+Artix = "󰣇"
+CentOS = ""
+Debian = "󰣚"
+Redhat = "󱄛"
+RedHatEnterprise = "󱄛"
+CachyOS = "󰣇"
+
+[username]
+show_always = true
+style_user = "bg:red fg:crust"
+style_root = "bg:red fg:crust"
+format = '[ $user]($style)'
 
 [directory]
-style = "fg:text bg:dir_bg"
+style = "bg:peach fg:text"
 format = "[ $path ]($style)"
 truncation_length = 3
 truncation_symbol = "…/"
 
 [directory.substitutions]
 "Documents" = "󰈙 "
-"Downloads" = " "
-"Music" = " "
-"Pictures" = " "
+"Downloads" = " "
+"Music" = "󰝚 "
+"Pictures" = " "
+"Developer" = "󰲋 "
 
 [git_branch]
-symbol = ""
-style = "bg:git_bg"
-format = '[[ $symbol $branch ](fg:accent bg:git_bg)]($style)'
+symbol = ""
+style = "bg:yellow"
+format = '[[ $symbol $branch ](fg:accent bg:yellow)]($style)'
 
 [git_status]
-style = "bg:git_bg"
-format = '[[($all_status$ahead_behind )](fg:accent bg:git_bg)]($style)'
-
-[c]
-symbol = " "
-style = "bg:lang_bg"
-format = '[[ $symbol ($version) ](fg:accent bg:lang_bg)]($style)'
-
-[python]
-symbol = " "
-style = "bg:lang_bg"
-format = '[[ $symbol ($version) ](fg:accent bg:lang_bg)]($style)'
-
-[rust]
-symbol = ""
-style = "bg:lang_bg"
-format = '[[ $symbol ($version) ](fg:accent bg:lang_bg)]($style)'
-
-[golang]
-symbol = ""
-style = "bg:lang_bg"
-format = '[[ $symbol ($version) ](fg:accent bg:lang_bg)]($style)'
+style = "bg:yellow"
+format = '[[($all_status$ahead_behind )](fg:accent bg:yellow)]($style)'
 
 [nodejs]
-symbol = ""
-style = "bg:lang_bg"
-format = '[[ $symbol ($version) ](fg:accent bg:lang_bg)]($style)'
+symbol = ""
+style = "bg:green"
+format = '[[ $symbol( $version) ](fg:accent bg:green)]($style)'
+
+[c]
+symbol = " "
+style = "bg:green"
+format = '[[ $symbol( $version) ](fg:accent bg:green)]($style)'
+
+[rust]
+symbol = ""
+style = "bg:green"
+format = '[[ $symbol( $version) ](fg:accent bg:green)]($style)'
+
+[golang]
+symbol = ""
+style = "bg:green"
+format = '[[ $symbol( $version) ](fg:accent bg:green)]($style)'
+
+[php]
+symbol = ""
+style = "bg:green"
+format = '[[ $symbol( $version) ](fg:accent bg:green)]($style)'
 
 [java]
-symbol = " "
-style = "bg:lang_bg"
-format = '[[ $symbol ($version) ](fg:accent bg:lang_bg)]($style)'
+symbol = " "
+style = "bg:green"
+format = '[[ $symbol( $version) ](fg:accent bg:green)]($style)'
+
+[kotlin]
+symbol = ""
+style = "bg:green"
+format = '[[ $symbol( $version) ](fg:accent bg:green)]($style)'
+
+[haskell]
+symbol = ""
+style = "bg:green"
+format = '[[ $symbol( $version) ](fg:accent bg:green)]($style)'
+
+[python]
+symbol = ""
+style = "bg:green"
+format = '[[ $symbol( $version)(\(#$virtualenv\)) ](fg:accent bg:green)]($style)'
+
+[docker_context]
+symbol = ""
+style = "bg:sapphire"
+format = '[[ $symbol( $context) ](fg:accent bg:sapphire)]($style)'
+
+[conda]
+symbol = "  "
+style = "fg:accent bg:sapphire"
+format = '[$symbol$environment ]($style)'
+ignore_base = false
 
 [time]
 disabled = false
 time_format = "%R"
-style = "bg:time_bg"
-format = '[[  $time ](fg:dimmed bg:time_bg)]($style)'
+style = "bg:lavender"
+format = '[[  $time ](fg:dimmed bg:lavender)]($style)'
 
-[cmd_duration]
-min_time = 2_000
-style = "dimmed"
-format = " [$duration]($style)"
+[line_break]
+disabled = true
 
 [character]
-success_symbol = "[❯](bold accent)"
-error_symbol = "[❯](bold error)"
+disabled = false
+success_symbol = '[❯](bold fg:accent)'
+error_symbol = '[❯](bold fg:error)'
+vimcmd_symbol = '[❮](bold fg:success)'
+vimcmd_replace_one_symbol = '[❮](bold fg:dimmed)'
+vimcmd_replace_symbol = '[❮](bold fg:dimmed)'
+vimcmd_visual_symbol = '[❮](bold fg:warning)'
+
+[cmd_duration]
+show_milliseconds = true
+format = " in $duration "
+style = "dimmed"
+disabled = false
+show_notifications = true
+min_time_to_notify = 45000
+
+[palettes.dankcolors]
+# Segment backgrounds (light -> dark gradient)
+red = "{{colors.primary.default.hex}}"
+peach = "{{dank16.color4.default.hex}}"
+yellow = "{{colors.secondary_container.default.hex}}"
+green = "{{dank16.color5.default.hex}}"
+sapphire = "{{colors.surface.default.hex}}"
+lavender = "{{colors.background.default.hex}}"
+
+# Text colors
+crust = "{{colors.background.default.hex}}"
+text = "{{colors.on_surface.default.hex}}"
+accent = "{{colors.primary.default.hex}}"
+dimmed = "{{colors.outline.default.hex}}"
+error = "{{colors.error.default.hex}}"
+success = "{{dank16.color2.default.hex}}"
+warning = "{{dank16.color3.default.hex}}"
