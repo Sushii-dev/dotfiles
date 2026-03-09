@@ -1,8 +1,9 @@
 {
   "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/master/doc/json_schema.json",
+  // Logo: uses custom image if present, otherwise distro logo.
+  // To customize: place your image at ~/.config/fastfetch/images/fastfetch.png
+  // then set "source" below. Kitty/Ghostty support "kitty" type, other terminals use "sixel".
   "logo": {
-    "source": "~/.config/fastfetch/images/fastfetch.png",
-    "type": "kitty",
     "height": 16,
     "printRemaining": false
   },
