@@ -1,5 +1,16 @@
 #!/bin/bash
-# Patches DMS colors.kdl to use custom border gradient after DMS regenerates it
-# Only replace active-color inside layout {} blocks (focus-ring, border), not in recent-windows {}
-sed -i '/^layout {$/,/^}$/s/active-color   "#[0-9a-fA-F]*"/active-gradient from="#f078a0" to="#9060e8" angle=45 relative-to="window"/g' \
+# Patches DMS colors.kdl to use a contrasting gradient after DMS regenerates it.
+# Colors come from matugen (tertiary + primary), generated to border-gradient-colors.txt.
+# Falls back to hardcoded colors if the matugen file doesn't exist yet.
+COLORS_FILE="$HOME/.config/niri/dms/border-gradient-colors.txt"
+
+if [[ -f "$COLORS_FILE" ]]; then
+    FROM=$(sed -n '1p' "$COLORS_FILE")
+    TO=$(sed -n '2p' "$COLORS_FILE")
+else
+    FROM="#f078a0"
+    TO="#9060e8"
+fi
+
+sed -i '/^layout {$/,/^}$/s|active-color   "#[0-9a-fA-F]*"|active-gradient from="'"$FROM"'" to="'"$TO"'" angle=45 relative-to="window"|g' \
     ~/.config/niri/dms/colors.kdl

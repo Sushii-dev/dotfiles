@@ -3,3 +3,7 @@
 [templates.starship]
 input_path = '~/.config/matugen/templates/starship.toml'
 output_path = '~/.config/starship.toml'
+
+[templates.niri-border-gradient]
+input_path = '~/.config/matugen/templates/niri-border-gradient.txt'
+output_path = '~/.config/niri/dms/border-gradient-colors.txt'
