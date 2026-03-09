@@ -2,6 +2,11 @@
 # Run fastfetch with logo height dynamically matched to output line count.
 # Uses "kitty" logo type so only height is needed — aspect ratio is auto-preserved.
 
+if ! command -v fastfetch &>/dev/null; then
+    echo "fastfetch not installed"
+    exit 0
+fi
+
 lines=$(fastfetch --logo none --pipe "$@" 2>/dev/null | wc -l)
 lines=${lines// /}
 [[ -z "$lines" || "$lines" -lt 1 ]] && lines=18
