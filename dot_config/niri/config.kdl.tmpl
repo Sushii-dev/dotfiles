@@ -316,6 +316,13 @@ window-rule {
     default-window-height { proportion 0.5; }
 }
 {{ end }}
+{{ if eq .chezmoi.hostname "Sushilap" }}
+// Kitty opens full width on laptop
+window-rule {
+    match app-id="kitty"
+    default-column-width { proportion 1.0; }
+}
+{{ end }}
 // KDE app translucency (Dolphin, Ark, Okular)
 window-rule {
     match app-id="org.kde.dolphin"

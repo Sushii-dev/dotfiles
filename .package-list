@@ -17,6 +17,7 @@ zoxide
 
 # AUR packages (installed via paru)
 millennium
+posy-improved-cursors
 mpv-thumbfast-git
 mpv-uosc
 vesktop
