@@ -14,6 +14,9 @@ starship
 ttf-jetbrains-mono-nerd
 vivid
 zoxide
+qemu-base
+socat
+virtiofsd
 
 # AUR packages (installed via paru)
 millennium
@@ -21,3 +24,4 @@ posy-improved-cursors
 mpv-thumbfast-git
 mpv-uosc
 vesktop
+claude-desktop-appimage
