@@ -33,6 +33,12 @@ AUR_PKGS=(
     claude-desktop-appimage
 )
 
+{{ if eq .chezmoi.hostname "Sushitop" -}}
+# KDE Plasma gaming session extras (kde-dank: tiling + DMS look in Plasma)
+PACMAN_PKGS+=(plasma-systemmonitor)
+AUR_PKGS+=(kwin-effects-better-blur-dx)
+{{ end -}}
+
 # Install missing pacman packages
 missing=()
 for pkg in "${PACMAN_PKGS[@]}"; do
