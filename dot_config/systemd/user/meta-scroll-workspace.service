@@ -1,0 +1,12 @@
+[Unit]
+Description=Meta+wheel workspace switching for KDE (niri parity)
+PartOf=graphical-session.target
+
+[Service]
+ExecCondition=/bin/sh -c '[ "$XDG_CURRENT_DESKTOP" = "KDE" ]'
+ExecStart=/usr/bin/python3 /home/sushii/kde-dank/meta-scroll-workspace.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=plasma-workspace.target

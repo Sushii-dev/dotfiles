@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+"""Merge cursor size into kcminputrc, preserving per-device Libinput sections."""
+import sys
+
+OVERRIDES = {
+    "Mouse": {
+        "cursorSize": "32",
+    },
+}
+
+lines = sys.stdin.read().splitlines()
+
+for section, keys in OVERRIDES.items():
+    header = f"[{section}]"
+    section_idx = None
+    next_section_idx = None
+    for i, line in enumerate(lines):
+        if line.strip() == header:
+            section_idx = i
+        elif section_idx is not None and line.strip().startswith("[") and i > section_idx:
+            next_section_idx = i
+            break
+
+    if section_idx is None:
+        if lines and lines[-1].strip():
+            lines.append("")
+        lines.append(header)
+        for k, v in keys.items():
+            lines.append(f"{k}={v}")
+    else:
+        insert_at = next_section_idx if next_section_idx else len(lines)
+        for k, v in keys.items():
+            found = False
+            for i in range(section_idx + 1, insert_at):
+                if lines[i].split("=")[0].strip() == k:
+                    lines[i] = f"{k}={v}"
+                    found = True
+                    break
+            if not found:
+                lines.insert(insert_at, f"{k}={v}")
+                insert_at += 1
+
+print("\n".join(lines))

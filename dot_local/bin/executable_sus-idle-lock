@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+#
+# sus-idle-lock — DE-agnostic "caffeine" idle/sleep inhibitor toggle.
+#
+# Blocks idle and sleep via systemd-inhibit (works identically on KDE
+# Plasma and niri — no Hyprland idle daemon involved). State is tracked
+# through a PID file so the toggle is idempotent and safe to re-enter.
+#
+# Usage:
+#   sus-idle-lock [toggle]   Toggle inhibitor on/off (default).
+#   sus-idle-lock on         Ensure inhibitor is running.
+#   sus-idle-lock off        Ensure inhibitor is stopped.
+#   sus-idle-lock status     Print "on" or "off".
+
+set -euo pipefail
+
+PID_FILE="${XDG_RUNTIME_DIR:-/tmp}/sus-idle-lock.pid"
+
+# notify() wraps notify-send if available; never fatal if it is missing.
+notify() {
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send -a "sus-idle-lock" "$@" || true
+    fi
+}
+
+# die() reports a fatal error to stderr and (best effort) the desktop.
+die() {
+    printf 'sus-idle-lock: %s\n' "$1" >&2
+    notify "sus-idle-lock" "$1"
+    exit 1
+}
+
+require() {
+    command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
+}
+
+# is_running() returns 0 when a tracked inhibitor process is alive.
+# A stale PID file (process gone) is cleaned up and treated as "off".
+is_running() {
+    local pid
+    [[ -f "$PID_FILE" ]] || return 1
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+        return 0
+    fi
+    rm -f "$PID_FILE"
+    return 1
+}
+
+start_inhibitor() {
+    require systemd-inhibit
+    require setsid
+    require flock
+
+    # Serialize check-then-spawn so a double keybind press can't leak a second
+    # inhibitor (the race loser would survive untracked, blocking idle forever).
+    # fd 9 is closed in the child (9>&-) so the lock releases on script exit.
+    exec 9>"${XDG_RUNTIME_DIR:-/tmp}/sus-idle-lock.lock"
+    flock -n 9 || { printf 'on\n'; return 0; }
+
+    if is_running; then
+        notify "Caffeine on" "Idle/sleep already blocked"
+        printf 'on\n'
+        return 0
+    fi
+
+    # Detach a long-lived inhibitor. setsid (without --fork) execs into
+    # systemd-inhibit, keeping the same PID, so backgrounding it and
+    # capturing $! yields the real, trackable inhibitor process. It is
+    # divorced from this shell's session and survives the script exiting.
+    # systemd-inhibit holds the lock for the lifetime of 'sleep infinity'.
+    setsid systemd-inhibit \
+        --what=idle:sleep \
+        --who=sus \
+        --why="caffeine" \
+        --mode=block \
+        sleep infinity </dev/null >/dev/null 2>&1 9>&- &
+    printf '%s\n' "$!" >"$PID_FILE"
+
+    notify "Caffeine on" "Idle/sleep blocked"
+    printf 'on\n'
+}
+
+stop_inhibitor() {
+    if ! is_running; then
+        notify "Caffeine off" "No inhibitor was active"
+        printf 'off\n'
+        return 0
+    fi
+
+    local pid
+    pid="$(cat "$PID_FILE")"
+    kill "$pid" 2>/dev/null || true
+    rm -f "$PID_FILE"
+
+    notify "Caffeine off" "Idle/sleep allowed"
+    printf 'off\n'
+}
+
+main() {
+    local action="${1:-toggle}"
+
+    case "$action" in
+        toggle)
+            if is_running; then
+                stop_inhibitor
+            else
+                start_inhibitor
+            fi
+            ;;
+        on)
+            start_inhibitor
+            ;;
+        off)
+            stop_inhibitor
+            ;;
+        status)
+            if is_running; then
+                printf 'on\n'
+            else
+                printf 'off\n'
+            fi
+            ;;
+        -h | --help | help)
+            sed -n '2,16p' "$0"
+            ;;
+        *)
+            die "unknown action: $action (use toggle|on|off|status)"
+            ;;
+    esac
+}
+
+main "$@"

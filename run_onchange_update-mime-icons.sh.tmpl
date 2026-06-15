@@ -1,0 +1,14 @@
+#!/bin/bash
+# Refresh MIME database and icon cache when custom MIME types or icons change.
+# mime hash: {{ include "dot_local/share/mime/packages/ffxiv-mods.xml" | sha256sum }}
+# pmp icon hash: {{ include "dot_local/share/icons/hicolor/scalable/mimetypes/application-x-penumbra-mod.svg" | sha256sum }}
+# ttmp2 icon hash: {{ include "dot_local/share/icons/hicolor/scalable/mimetypes/application-x-textools-mod.svg" | sha256sum }}
+set -euo pipefail
+
+if command -v update-mime-database &>/dev/null; then
+    update-mime-database "$HOME/.local/share/mime"
+fi
+
+if command -v gtk-update-icon-cache &>/dev/null; then
+    gtk-update-icon-cache --force --quiet "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+fi

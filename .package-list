@@ -17,6 +17,16 @@ zoxide
 qemu-base
 socat
 virtiofsd
+rclone
+proton-mail-bin
+proton-vpn-gtk-app
+protonmail-bridge-core
+
+# sus menu (Omarchy port) tooling: screenshot/OCR + screen recording
+grim
+tesseract
+tesseract-data-eng
+gpu-screen-recorder
 
 # AUR packages (installed via paru)
 millennium
@@ -25,5 +35,9 @@ mpv-thumbfast-git
 mpv-uosc
 vesktop
 claude-desktop-appimage
+proton-pass-bin
 plasma-systemmonitor (Sushitop only)
 kwin-effects-better-blur-dx (AUR, Sushitop only)
+python-evdev (KDE niri-parity daemons: meta-scroll, mff)
+python-dbus (KDE niri-parity daemons: mff)
+python-gobject (KDE niri-parity daemons: mff GLib loop)

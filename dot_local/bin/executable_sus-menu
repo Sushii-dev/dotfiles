@@ -1,0 +1,759 @@
+#!/usr/bin/env bash
+#
+# sus-menu — a nested picker-driven control menu (Omarchy "menu" port).
+#
+# Ported from Omarchy's omarchy-menu to a CachyOS box running BOTH
+# KDE Plasma 6 and niri. Every action branches on $XDG_CURRENT_DESKTOP
+# ("KDE" vs "niri") and uses ONLY native KDE / niri tooling — no Hyprland,
+# walker, waybar, mako, hyprshot, hyprpicker, hypridle, hyprlock, or
+# omarchy-* internals (except the already-ported omarchy-webapp-* and
+# omarchy-launch-webapp, which are reused verbatim).
+#
+# Picker: vicinae's dmenu subcommand by default ("vicinae dmenu"), reading a
+# newline list on stdin and printing the chosen line on stdout. Swappable via
+# the PICKER env var (e.g. PICKER="fuzzel --dmenu"). Both vicinae and fuzzel
+# accept -p as a prompt/placeholder flag; vicinae additionally takes -n
+# (navigation breadcrumb), which the wrapper only passes to vicinae.
+#
+# Companion scripts this menu calls (all ported separately into chezmoi):
+#   sus            — top-level dispatcher (also exposes `sus install`)
+#   sus-install    — curated paru-backed package installer (TUI categories)
+#   sus-reminder   — systemd-run --user transient-timer reminders
+#   sus-share      — LocalSend / 0x0.st share helper
+#   sus-screenrecord — gpu-screen-recorder NVENC wrapper (PID-file toggle)
+#   sus-pkg-remove, sus-remove-browser, sus-remove-security-* — removers
+#
+# NOTE ON `set -e`: this is an INTERACTIVE menu. A single non-zero exit from a
+# cancelled picker, a backed-out submenu, or an action whose command returns
+# non-zero (e.g. `pkill` finding nothing) must NOT tear down the whole menu.
+# So we deliberately DO NOT use `set -e`. We DO use `set -u` (catch unset-var
+# typos) and `set -o pipefail` (so a failing producer in `producer | $PICKER`
+# is visible), both of which are safe for an interactive loop because every
+# pick is explicitly checked for emptiness before use.
+
+# Action strings are deliberately single-quoted so they are evaluated LATER by
+# run_bg/run_term's `bash -lc`, not at definition time. SC2016 (expressions in
+# single quotes) is therefore expected and intentional throughout this file.
+# shellcheck disable=SC2016
+set -uo pipefail
+
+# ---------------------------------------------------------------------------
+# Picker + DE detection
+# ---------------------------------------------------------------------------
+
+# Swappable picker. Default vicinae dmenu; fall back to fuzzel --dmenu.
+PICKER="${PICKER:-vicinae dmenu}"
+
+# Export so the few inline `sh -c '... $PICKER ...'` actions inherited from the
+# adaptation map can see it (those actions read $PICKER from the environment).
+export PICKER
+
+# Terminal used for TUI / needs_terminal actions.
+TERMINAL="${TERMINAL:-ghostty}"
+
+# Desktop environment: "kde" or "niri" (lower-cased from $XDG_CURRENT_DESKTOP).
+# Plasma reports "KDE"; niri reports "niri". Default to kde (the PRIMARY target)
+# if something unexpected shows up so the menu still does *something* sane.
+detect_de() {
+  case "${XDG_CURRENT_DESKTOP:-}" in
+    *niri* | *Niri* | *NIRI*) echo "niri" ;;
+    *) echo "kde" ;;
+  esac
+}
+DE="$(detect_de)"
+
+# ---------------------------------------------------------------------------
+# pick(): pipe a newline list (on stdin) to $PICKER with a breadcrumb title.
+#   $1 = breadcrumb / navigation title (e.g. "sus ▸ System")
+#   $2 = optional placeholder / prompt text
+# Prints the selected line on stdout; empty string if the user cancelled.
+#
+# vicinae understands  -n <title>  (breadcrumb) and -p <placeholder>.
+# fuzzel understands    -p <prompt> only; the wrapper passes -n only to vicinae.
+# ---------------------------------------------------------------------------
+pick() {
+  local title="${1:-sus}"
+  local placeholder="${2:-Select}"
+  if [[ "$PICKER" == vicinae* ]]; then
+    $PICKER -n "$title" -p "$placeholder"
+  else
+    # fuzzel --dmenu and other dmenu-likes: prompt via -p only.
+    $PICKER -p "$title: "
+  fi
+}
+
+# run_term(): launch a command string inside the terminal for TUI/interactive
+# actions. Uses bash -lc so login PATH (~/.local/bin, ~/.cargo/bin, etc.) and
+# interactive `read` prompts work.
+run_term() {
+  setsid -f "$TERMINAL" -e bash -lc "$*" >/dev/null 2>&1
+}
+
+# run_bg(): fire-and-forget a non-terminal action, fully detached so closing
+# the picker doesn't kill it.
+run_bg() {
+  setsid -f bash -lc "$*" >/dev/null 2>&1
+}
+
+# notify(): thin notify-send wrapper (present on both DEs).
+notify() { notify-send -a sus "$@" >/dev/null 2>&1 || true; }
+
+# de(): pick the kde or niri variant.  de "<kde cmd>" "<niri cmd>"
+# Echoes the chosen command string for the current DE.
+de() {
+  if [[ "$DE" == "niri" ]]; then echo "$2"; else echo "$1"; fi
+}
+
+# unsupported(): action has no equivalent on the current DE — tell the user.
+unsupported() {
+  notify "Not supported on $DE" "${1:-This action has no equivalent here.}"
+}
+
+# ===========================================================================
+#  MENU TREE
+#  Each submenu is a function. Every submenu has a "← Back" entry that returns
+#  to its parent. The top-level menu loops; submenus loop until Back/cancel.
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Top level: sus
+# ---------------------------------------------------------------------------
+menu_main() {
+  local choice
+  while true; do
+    choice="$(printf '%s\n' \
+      "Apps" \
+      "Learn" \
+      "Trigger" \
+      "Style" \
+      "Setup" \
+      "Install" \
+      "Remove" \
+      "Update" \
+      "About" \
+      "System" | pick "sus" "Choose a category")"
+    case "$choice" in
+      "Apps")    action_apps ;;
+      "Learn")   menu_learn ;;
+      "Trigger") menu_trigger ;;
+      "Style")   menu_style ;;
+      "Setup")   menu_setup ;;
+      "Install") menu_install ;;
+      "Remove")  menu_remove ;;
+      "Update")  menu_update ;;
+      "About")   menu_about ;;
+      "System")  menu_system ;;
+      "" )       return 0 ;;   # cancelled at top level → exit
+      *)         return 0 ;;
+    esac
+  done
+}
+
+# ---------------------------------------------------------------------------
+# Apps — single launcher item (walker → vicinae)
+# ---------------------------------------------------------------------------
+action_apps() {
+  # vicinae toggle is identical on KDE and niri.
+  run_bg "vicinae toggle"
+}
+
+# ---------------------------------------------------------------------------
+# Learn — DE-native keybinding cheatsheet + reference links
+# ---------------------------------------------------------------------------
+menu_learn() {
+  local choice
+  while true; do
+    choice="$(printf '%s\n' \
+      "Keybindings" \
+      "niri (wiki)" \
+      "Arch (wiki)" \
+      "Neovim (LazyVim keymaps)" \
+      "Fish (cheatsheet)" \
+      "← Back" | pick "sus ▸ Learn" "Reference")"
+    case "$choice" in
+      "Keybindings")
+        run_bg "$(de "systemsettings kcm_keys" "niri msg action show-hotkey-overlay")" ;;
+      "niri (wiki)")
+        run_bg 'omarchy-launch-webapp "https://github.com/YaLTeR/niri/wiki"' ;;
+      "Arch (wiki)")
+        run_bg 'omarchy-launch-webapp "https://wiki.archlinux.org/title/Main_page"' ;;
+      "Neovim (LazyVim keymaps)")
+        run_bg 'omarchy-launch-webapp "https://www.lazyvim.org/keymaps"' ;;
+      "Fish (cheatsheet)")
+        run_bg 'omarchy-launch-webapp "https://devhints.io/fish"' ;;
+      "← Back"|"") return 0 ;;
+    esac
+  done
+}
+
+# ---------------------------------------------------------------------------
+# Trigger — do-something-now hub
+# ---------------------------------------------------------------------------
+menu_trigger() {
+  local choice
+  while true; do
+    choice="$(printf '%s\n' \
+      "Reminder" \
+      "Capture" \
+      "Transcode" \
+      "Share" \
+      "Toggle" \
+      "Hardware" \
+      "← Back" | pick "sus ▸ Trigger" "Trigger an action")"
+    case "$choice" in
+      "Reminder")  menu_trigger_reminder ;;
+      "Capture")   menu_trigger_capture ;;
+      "Transcode") action_trigger_transcode ;;
+      "Share")     menu_trigger_share ;;
+      "Toggle")    menu_trigger_toggle ;;
+      "Hardware")  menu_trigger_hardware ;;
+      "← Back"|"") return 0 ;;
+    esac
+  done
+}
+
+# --- Trigger ▸ Reminder ----------------------------------------------------
+# Backed by the ported sus-reminder script (systemd --user transient timers).
+menu_trigger_reminder() {
+  local choice
+  while true; do
+    choice="$(printf '%s\n' \
+      "Set one" \
+      "Show all" \
+      "Clear all" \
+      "← Back" | pick "sus ▸ Trigger ▸ Reminder" "Reminder")"
+    case "$choice" in
+      "Set one")   run_bg "sus-reminder set" ;;
+      "Show all")  run_term "sus-reminder show; read -n1 -s -r -p $'\nPress any key to close…'" ;;
+      "Clear all") run_bg "sus-reminder clear" ;;
+      "← Back"|"") return 0 ;;
+    esac
+  done
+}
+
+# --- Trigger ▸ Capture -----------------------------------------------------
+menu_trigger_capture() {
+  local choice
+  while true; do
+    choice="$(printf '%s\n' \
+      "Screenshot" \
+      "Screen record" \
+      "Text extraction (OCR)" \
+      "← Back" | pick "sus ▸ Trigger ▸ Capture" "Capture")"
+    case "$choice" in
+      "Screenshot")
+        # KDE: Spectacle region → clipboard. niri: native screenshot UI.
+        run_bg "$(de "spectacle --region --copy-image" "niri msg action screenshot")" ;;
+      "Screen record")
+        menu_trigger_capture_screenrecord ;;
+      "Text extraction (OCR)")
+        # KDE: spectacle region to temp PNG → tesseract → clipboard.
+        # niri: grim+slurp region → tesseract → clipboard (grim must be installed).
+        run_bg "$(de \
+          'f=$(mktemp --suffix=.png); spectacle -b -n -r -o \"$f\" && tesseract \"$f\" - 2>/dev/null | wl-copy && notify-send -a sus OCR \"Text copied to clipboard\"; rm -f \"$f\"' \
+          'f=$(mktemp --suffix=.png); grim -g \"$(slurp)\" \"$f\" && tesseract \"$f\" - 2>/dev/null | wl-copy && notify-send -a sus OCR \"Text copied to clipboard\"; rm -f \"$f\"')" ;;
+      "← Back"|"") return 0 ;;
+    esac
+  done
+}
+
+# --- Trigger ▸ Capture ▸ Screen record -------------------------------------
+# Backed by the ported sus-screenrecord wrapper (gpu-screen-recorder, NVENC).
+# The "Stop recording" entry is only useful while a recording is in progress;
+# we surface it only when the PID file exists.
+menu_trigger_capture_screenrecord() {
+  local choice opts pidfile
+  pidfile="${XDG_RUNTIME_DIR:-/tmp}/sus-screenrecord.pid"
+  while true; do
+    if [[ -f "$pidfile" ]]; then
+      opts=$'Stop recording\n← Back'
+    else
+      opts=$'With no audio\nWith desktop audio\nWith desktop + microphone audio\n← Back'
+    fi
+    choice="$(printf '%s' "$opts" | pick "sus ▸ Trigger ▸ Capture ▸ Record" "Screen record")"
+    case "$choice" in
+      "Stop recording")                  run_bg "sus-screenrecord --stop" ; return 0 ;;
+      "With no audio")                   run_bg "sus-screenrecord" ; return 0 ;;
+      "With desktop audio")              run_bg "sus-screenrecord --desktop-audio" ; return 0 ;;
+      "With desktop + microphone audio") run_bg "sus-screenrecord --desktop-audio --mic" ; return 0 ;;
+      "← Back"|"") return 0 ;;
+    esac
+  done
+}
+
+# --- Trigger ▸ Transcode ---------------------------------------------------
+# Pick a media file via the picker, transcode to H.264/AAC mp4 in a terminal.
+action_trigger_transcode() {
+  run_term 'f=$(printf "" | '"$PICKER"' -p "Path to media file to transcode"); [ -f "$f" ] || exit 0; ffmpeg -i "$f" -c:v libx264 -crf 23 -preset slow -c:a aac -b:a 160k "${f%.*}_transcoded.mp4"; echo Done; read -n1 -s -r -p "Press any key to close…"'
+}
+
+# --- Trigger ▸ Share -------------------------------------------------------
+# Backed by the ported sus-share helper (clipboard/file/folder → share host).
+menu_trigger_share() {
+  local choice
+  while true; do
+    choice="$(printf '%s\n' \
+      "Clipboard" \
+      "File" \
+      "Folder" \
+      "← Back" | pick "sus ▸ Trigger ▸ Share" "Share")"
+    case "$choice" in
+      "Clipboard") run_bg "sus-share clipboard" ;;
+      "File")      run_term "sus-share file" ;;
+      "Folder")    run_term "sus-share folder" ;;
+      "← Back"|"") return 0 ;;
+    esac
+  done
+}
+
+# --- Trigger ▸ Toggle ------------------------------------------------------
+# Only the portable toggles survive (the Hyprland layout/gap/ratio/direct-boot
+# toggles were dropped as inapplicable). Branches KDE-dbus vs DMS-ipc.
+menu_trigger_toggle() {
+  local choice
+  while true; do
+    choice="$(printf '%s\n' \
+      "Nightlight" \
+      "Idle Lock (caffeine)" \
+      "Notifications (DND)" \
+      "Monitor Scaling" \
+      "← Back" | pick "sus ▸ Trigger ▸ Toggle" "Toggle")"
+    case "$choice" in
+      "Nightlight")
+        # KDE: read+flip kwinrc NightColor Active, then reconfigure KWin.
+        # niri: DMS owns night mode.
+        run_bg "$(de \
+          'a=$(kreadconfig6 --file kwinrc --group NightColor --key Active --default false); if [ \"$a\" = true ]; then kwriteconfig6 --file kwinrc --group NightColor --key Active false; else kwriteconfig6 --file kwinrc --group NightColor --key Active true; fi; qdbus6 org.kde.KWin /org/kde/KWin org.kde.KWin.reconfigure' \
+          'dms ipc call night toggle')" ;;
+      "Idle Lock (caffeine)")
+        # KDE: hardened systemd-inhibit toggle via the sus-idle-lock companion
+        # (flock against double-start + stale-pid cleanup). niri: DMS inhibit.
+        run_bg "$(de "sus-idle-lock toggle" "dms ipc call inhibit toggle")" ;;
+      "Notifications (DND)")
+        # KDE: org.freedesktop.Notifications.Inhibit is released the instant the
+        # caller disconnects (transient), so a fire-and-forget qdbus call is a
+        # no-op. Open the notifications KCM where DND actually lives instead.
+        # niri: DMS has a real persistent DND toggle.
+        run_bg "$(de "kcmshell6 kcm_notifications" "dms ipc call notifications toggleDoNotDisturb")" ;;
+      "Monitor Scaling")
+        # KDE: cycle scale on first enabled output. niri: bump focused output to 1.25.
+        run_bg "$(de \
+          'o=$(kscreen-doctor -j | jq -r \".outputs[] | select(.enabled) | .name\" | head -1); cur=$(kscreen-doctor -j | jq -r \".outputs[] | select(.name==\\\"$o\\\") | .scale\"); next=$(awk -v c=$cur \"BEGIN{print (c>=1.5)?1:c+0.25}\"); kscreen-doctor output.$o.scale.$next' \
+          'o=$(niri msg -j focused-output | jq -r .name); niri msg output \"$o\" scale 1.25')" ;;
+      "← Back"|"") return 0 ;;
+    esac
+  done
+}
+
+# --- Trigger ▸ Hardware ----------------------------------------------------
+# Re-scoped to the display controls that apply on this dual-monitor desktop:
+# Mirror Display, Arrange Displays, Toggle VRR. (All laptop/touch/hybrid-GPU
+# items were dropped as inapplicable hardware.)
+menu_trigger_hardware() {
+  local choice
+  while true; do
+    choice="$(printf '%s\n' \
+      "Display Settings" \
+      "← Back" | pick "sus ▸ Trigger ▸ Hardware" "Display")"
+    case "$choice" in
+      "Display Settings")
+        # Output names (DP-1, DP-2, …) are hardware-specific and differ per
+        # machine, so we deliberately do NOT hardcode mirror/VRR/arrange actions
+        # here (they would break on other machines). Open each DE's native
+        # display surface instead — robust everywhere.
+        run_bg "$(de "kcmshell6 kcm_kscreen" "dms ipc call settings open")" ;;
+      "← Back"|"") return 0 ;;
+    esac
+  done
+}
+
+# ---------------------------------------------------------------------------
+# Style — DE-native theming entry points (no unified theme CLI exists).
+# Theme/Unlock/About from Omarchy are out-of-scope or dropped; the surviving
+# items open each side's native theme/font/background/lock surfaces.
+# ---------------------------------------------------------------------------
+menu_style() {
+  local choice
+  while true; do
+    choice="$(printf '%s\n' \
+      "Theme / Colors" \
+      "Font" \
+      "Background / Wallpaper" \
+      "Compositor look" \
+      "Screensaver / Lock" \
+      "← Back" | pick "sus ▸ Style" "Appearance")"
+    case "$choice" in
+      "Theme / Colors")
+        # KDE: Plasma colour-scheme KCM. niri: DMS owns it (open DMS settings).
+        # Full custom theme-hotswap parity is out-of-scope for v1.
+        run_bg "$(de "systemsettings kcm_colors" "dms ipc call settings open || dms ipc settings open")" ;;
+      "Font")
+        run_bg "$(de "systemsettings kcm_fonts" "dms ipc call settings open || dms ipc settings open")" ;;
+      "Background / Wallpaper")
+        # KDE: pick from ~/Pictures/Wallpapers and apply. niri: DMS wallpaper flow.
+        run_bg "$(de \
+          'img=$(ls ~/Pictures/Wallpapers/* 2>/dev/null | '"$PICKER"' -p "Wallpaper") && plasma-apply-wallpaperimage "$img"' \
+          'dms ipc call settings open || dms ipc settings open')" ;;
+      "Compositor look")
+        # KDE: desktop-theme KCM. niri: open live config.kdl (real edits go to chezmoi source).
+        run_bg "$(de "systemsettings kcm_desktoptheme" "$TERMINAL -e \${EDITOR:-nvim} ~/.config/niri/config.kdl")" ;;
+      "Screensaver / Lock")
+        run_bg "$(de "systemsettings kcm_screenlocking" "dms ipc call settings open || dms ipc settings open")" ;;
+      "← Back"|"") return 0 ;;
+    esac
+  done
+}
+
+# ---------------------------------------------------------------------------
+# Setup — system configuration (audio/wifi/bt/power/sleep/monitors/etc.)
+# ---------------------------------------------------------------------------
+menu_setup() {
+  local choice
+  while true; do
+    choice="$(printf '%s\n' \
+      "Audio" \
+      "Wifi" \
+      "Bluetooth" \
+      "Power Profile" \
+      "System Sleep" \
+      "Monitors" \
+      "Keybindings" \
+      "Input" \
+      "Defaults" \
+      "DNS" \
+      "Security" \
+      "Config" \
+      "← Back" | pick "sus ▸ Setup" "Configure")"
+    case "$choice" in
+      "Audio")
+        run_bg "$(de "kcmshell6 kcm_pulseaudio || pavucontrol" "pavucontrol")" ;;
+      "Wifi")
+        run_bg "$(de "kcmshell6 kcm_networkmanagement" "$TERMINAL -e nmtui")" ;;
+      "Bluetooth")
+        run_bg "$(de "kcmshell6 kcm_bluetooth" "$TERMINAL -e bluetoothctl")" ;;
+      "Power Profile")
+        # DE-agnostic picker-driven powerprofilesctl.
+        run_bg 'powerprofilesctl set "$(powerprofilesctl list | awk "/:\$/{gsub(/[ *:]/,\"\");print}" | '"$PICKER"' -p "Power profile")"' ;;
+      "System Sleep")
+        menu_setup_sleep ;;
+      "Monitors")
+        run_bg "$(de "kcmshell6 kcm_kscreen" "$TERMINAL -e nvim ~/.local/share/chezmoi/dot_config/niri/config.kdl.tmpl")" ;;
+      "Keybindings")
+        # niri binds tracked in chezmoi (edit SOURCE). KDE: Shortcuts KCM (kwin-owned).
+        run_bg "$(de "systemsettings kcm_keys" "$TERMINAL -e nvim ~/.local/share/chezmoi/dot_config/niri/dms/binds.kdl")" ;;
+      "Input")
+        run_bg "$(de "kcmshell6 kcm_mouse kcm_keyboard kcm_touchpad" "$TERMINAL -e nvim ~/.local/share/chezmoi/dot_config/niri/config.kdl.tmpl")" ;;
+      "Defaults")
+        run_bg "$(de "kcmshell6 kcm_componentchooser" "$TERMINAL -e nvim ~/.local/share/chezmoi/dot_config/modify_mimeapps.list")" ;;
+      "DNS")
+        # Picker-driven nmcli DNS setter; needs sudo → terminal.
+        run_term 'sel=$(printf "Cloudflare 1.1.1.1,1.0.0.1\nQuad9 9.9.9.9,149.112.112.112\nGoogle 8.8.8.8,8.8.4.4\nDHCP (reset)\n" | '"$PICKER"' -p DNS); [ -z "$sel" ] && exit 0; con=$(nmcli -t -f NAME connection show --active | head -1); dns=$(printf "%s" "$sel" | awk "{print \$2}"); if [ -z "$dns" ] || [ "$dns" = "(reset)" ]; then sudo nmcli connection modify "$con" ipv4.ignore-auto-dns no ipv4.dns ""; else sudo nmcli connection modify "$con" ipv4.ignore-auto-dns yes ipv4.dns "$dns"; fi && sudo nmcli connection up "$con"; read -n1 -s -r -p "DNS updated. Press any key…"' ;;
+      "Security")
+        # ufw firewall status/toggle; needs sudo → terminal.
+        run_term 'command -v ufw >/dev/null || { echo "ufw not installed."; read -n1 -s -r -p "Press any key…"; exit 0; }; sudo ufw status verbose; read -rp "Toggle firewall? [enable/disable/skip]: " a; case "$a" in enable) sudo ufw enable;; disable) sudo ufw disable;; esac; read -n1 -s -r -p "Press any key…"' ;;
+      "Config")
+        # Open the chezmoi source tree (the real source of truth).
+        run_term "nvim ~/.local/share/chezmoi" ;;
+      "← Back"|"") return 0 ;;
+    esac
+  done
+}
+
+# --- Setup ▸ System Sleep --------------------------------------------------
+# Only the suspend on/off toggle survives (hibernate is not viable on zram-only
+# swap). The toggle masks/unmasks the sleep targets via pkexec.
+menu_setup_sleep() {
+  local choice
+  while true; do
+    choice="$(printf '%s\n' \
+      "Suspend now" \
+      "Enable/Disable Suspend" \
+      "Power Management settings" \
+      "← Back" | pick "sus ▸ Setup ▸ Sleep" "Sleep")"
+    case "$choice" in
+      "Suspend now")
+        run_bg "systemctl suspend" ;;
+      "Enable/Disable Suspend")
+        run_bg 'if systemctl is-enabled suspend.target 2>/dev/null | grep -q masked; then pkexec systemctl unmask sleep.target suspend.target hibernate.target && notify-send -a "System Sleep" "Suspend enabled"; else pkexec systemctl mask sleep.target suspend.target hibernate.target && notify-send -a "System Sleep" "Suspend disabled"; fi' ;;
+      "Power Management settings")
+        if [[ "$DE" == "niri" ]]; then
+          unsupported "Idle/sleep on niri is governed by DMS settings."
+        else
+          run_bg "systemsettings kcm_powerdevilprofilesconfig" || run_bg "systemsettings kcm_powerdevilglobalconfig"
+        fi ;;
+      "← Back"|"") return 0 ;;
+    esac
+  done
+}
+
+# ---------------------------------------------------------------------------
+# Install — curated paru installer tree (reuses sus-install + omarchy-webapp-*)
+# ---------------------------------------------------------------------------
+menu_install() {
+  local choice
+  while true; do
+    choice="$(printf '%s\n' \
+      "Package" \
+      "Web App" \
+      "TUI" \
+      "Service" \
+      "Development" \
+      "Editor" \
+      "Terminal" \
+      "Browser" \
+      "AI" \
+      "Gaming" \
+      "← Back" | pick "sus ▸ Install" "Install")"
+    case "$choice" in
+      "Package")
+        # Generic repo+AUR fuzzy installer (paru -Slq | fzf). Folds in AUR.
+        run_term 'pkg=$(paru -Slq | fzf --multi --prompt="install> "); [ -n "$pkg" ] && paru -S $pkg; read -n1 -s -r -p "done, press any key…"' ;;
+      "Web App")    run_term "omarchy-webapp-install" ;;
+      "TUI")        run_term "sus-install tui" ;;
+      "Service")    run_term "sus-install service" ;;
+      "Development") run_term "sus-install development" ;;
+      "Editor")     run_term "sus-install editor" ;;
+      "Terminal")   run_term "sus-install terminal" ;;
+      "Browser")    run_term "sus-install browser" ;;
+      "AI")         run_term "sus-install ai" ;;
+      "Gaming")     run_term "sus-install gaming" ;;
+      "← Back"|"") return 0 ;;
+    esac
+  done
+}
+
+# ---------------------------------------------------------------------------
+# Remove — uninstall packages / web apps (paru -Rns based)
+# ---------------------------------------------------------------------------
+menu_remove() {
+  local choice
+  while true; do
+    choice="$(printf '%s\n' \
+      "Package" \
+      "Web App" \
+      "← Back" | pick "sus ▸ Remove" "Remove")"
+    case "$choice" in
+      "Package")
+        # sus-pkg-remove: fzf-pick installed pkgs -> paru -Rns -> un-record from chezmoi.
+        run_term "sus-pkg-remove" ;;
+      "Web App")
+        run_term "omarchy-webapp-remove" ;;
+      "← Back"|"") return 0 ;;
+    esac
+  done
+}
+
+# ---------------------------------------------------------------------------
+# Update — reframed as generic system maintenance (paru -Syu + chezmoi apply +
+# firmware/password/timezone/time). Omarchy update/channel/refresh machinery
+# is dropped.
+# ---------------------------------------------------------------------------
+menu_update() {
+  local choice
+  while true; do
+    choice="$(printf '%s\n' \
+      "System Update" \
+      "Apply dotfiles (chezmoi)" \
+      "Restart Shell / Daemon" \
+      "Restart Hardware Subsystem" \
+      "Firmware" \
+      "Password" \
+      "Timezone" \
+      "Time Sync" \
+      "← Back" | pick "sus ▸ Update" "Maintenance")"
+    case "$choice" in
+      "System Update")
+        # paru -Syu + chezmoi apply; snapper/limine-snapper-sync auto-snapshot.
+        run_term 'paru -Syu && chezmoi apply; read -n1 -s -r -p "Done. Press any key…"' ;;
+      "Apply dotfiles (chezmoi)")
+        run_term 'chezmoi diff; read -rp "Apply these changes? [y/N] " ans; case "$ans" in y|Y) chezmoi apply -v;; esac; read -n1 -s -r -p "Done. Press any key…"' ;;
+      "Restart Shell / Daemon")
+        menu_update_process ;;
+      "Restart Hardware Subsystem")
+        menu_update_hardware ;;
+      "Firmware")
+        run_term 'command -v fwupdmgr >/dev/null || { echo "fwupd not installed."; read -n1 -s -r -p "Press any key…"; exit 0; }; fwupdmgr refresh; fwupdmgr get-updates; fwupdmgr update; read -n1 -s -r -p "Press any key…"' ;;
+      "Password")
+        run_term 'passwd; read -n1 -s -r -p "Press any key to close…"' ;;
+      "Timezone")
+        run_bg 'tz=$(timedatectl list-timezones | '"$PICKER"' -p "Timezone"); [ -n "$tz" ] && pkexec timedatectl set-timezone "$tz"' ;;
+      "Time Sync")
+        run_bg "pkexec timedatectl set-ntp true" ;;
+      "← Back"|"") return 0 ;;
+    esac
+  done
+}
+
+# --- Update ▸ Restart Shell / Daemon ---------------------------------------
+# niri: notifications/OSD/bar/idle all live in ONE DMS process → "dms restart"
+# collapses the lot. KDE: plasmashell + powerdevil + KWin NightLight, plus the
+# DE-agnostic vicinae launcher unit.
+menu_update_process() {
+  local choice
+  while true; do
+    choice="$(printf '%s\n' \
+      "Restart Shell (notifications / OSD / bar / idle)" \
+      "Restart Idle/Power daemon" \
+      "Restart/Reset Night Light" \
+      "Restart Launcher (vicinae)" \
+      "← Back" | pick "sus ▸ Update ▸ Restart" "Restart")"
+    case "$choice" in
+      "Restart Shell (notifications / OSD / bar / idle)")
+        run_bg "$(de "kquitapp6 plasmashell; kstart plasmashell" "dms restart")" ;;
+      "Restart Idle/Power daemon")
+        run_bg "$(de "systemctl --user restart plasma-powerdevil.service" "dms restart")" ;;
+      "Restart/Reset Night Light")
+        run_bg "$(de \
+          'kwriteconfig6 --file kwinrc --group NightColor --key Active false && qdbus6 org.kde.KWin /org/kde/KWin org.kde.KWin.reconfigure && kwriteconfig6 --file kwinrc --group NightColor --key Active true && qdbus6 org.kde.KWin /org/kde/KWin org.kde.KWin.reconfigure' \
+          'dms restart')" ;;
+      "Restart Launcher (vicinae)")
+        run_bg "systemctl --user restart vicinae.service" ;;
+      "← Back"|"") return 0 ;;
+    esac
+  done
+}
+
+# --- Update ▸ Restart Hardware Subsystem -----------------------------------
+# Generic "kick a wedged subsystem" actions. Audio = the documented Wave XLR
+# recovery (restart wireplumber + pipewire + pipewire-pulse, NOT EasyEffects).
+menu_update_hardware() {
+  local choice
+  while true; do
+    choice="$(printf '%s\n' \
+      "Audio (PipeWire)" \
+      "Wi-Fi" \
+      "Bluetooth" \
+      "Input (reload)" \
+      "← Back" | pick "sus ▸ Update ▸ Hardware" "Restart subsystem")"
+    case "$choice" in
+      "Audio (PipeWire)")
+        run_term "systemctl --user restart wireplumber pipewire pipewire-pulse" ;;
+      "Wi-Fi")
+        run_term "rfkill block wifi; sleep 1; rfkill unblock wifi; sudo systemctl restart NetworkManager" ;;
+      "Bluetooth")
+        run_term "rfkill block bluetooth; sleep 1; rfkill unblock bluetooth; sudo systemctl restart bluetooth" ;;
+      "Input (reload)")
+        run_term "$(de \
+          \"kcminit kcm_touchpad; echo 'Reapplied Plasma input settings.'\" \
+          \"niri msg action reload-config; echo 'Reloaded niri input config.'\")" ;;
+      "← Back"|"") return 0 ;;
+    esac
+  done
+}
+
+# ---------------------------------------------------------------------------
+# About — system info splash via the user's fastfetch-dynamic wrapper
+# ---------------------------------------------------------------------------
+menu_about() {
+  local choice
+  while true; do
+    choice="$(printf '%s\n' \
+      "System Info" \
+      "← Back" | pick "sus ▸ About" "About")"
+    case "$choice" in
+      "System Info")
+        run_term 'fastfetch-dynamic; read -n1 -s -r -p $'"'"'\nPress any key to close…'"'"'' ;;
+      "← Back"|"") return 0 ;;
+    esac
+  done
+}
+
+# ---------------------------------------------------------------------------
+# System — power / session management
+# ---------------------------------------------------------------------------
+menu_system() {
+  local choice
+  while true; do
+    choice="$(printf '%s\n' \
+      "Lock" \
+      "Suspend" \
+      "Logout" \
+      "Restart" \
+      "Shutdown" \
+      "← Back" | pick "sus ▸ System" "Session")"
+    case "$choice" in
+      "Lock")
+        run_bg "$(de "loginctl lock-session" "dms ipc call lock lock")" ;;
+      "Suspend")
+        run_bg "systemctl suspend" ;;
+      "Logout")
+        run_bg "$(de "qdbus6 org.kde.Shutdown /Shutdown org.kde.Shutdown.logout" "niri msg action quit")" ;;
+      "Restart")
+        run_bg "$(de "qdbus6 org.kde.Shutdown /Shutdown org.kde.Shutdown.logoutAndReboot" "systemctl reboot")" ;;
+      "Shutdown")
+        run_bg "$(de "qdbus6 org.kde.Shutdown /Shutdown org.kde.Shutdown.logoutAndShutdown" "systemctl poweroff")" ;;
+      "← Back"|"") return 0 ;;
+    esac
+  done
+}
+
+# ===========================================================================
+#  ENTRY POINT / SUBCOMMAND DISPATCH
+#
+#  With no args  → open the top-level menu.
+#  With args     → jump straight into a sub-tree. This supports the map entries
+#  that call `sus-menu trigger capture`, `sus-menu trigger share`, etc., so a
+#  keybind or another script can deep-link into any node.
+# ===========================================================================
+main() {
+  case "${1:-}" in
+    ""|main)        menu_main ;;
+    apps)           action_apps ;;
+    learn)          menu_learn ;;
+    trigger)
+      case "${2:-}" in
+        ""|menu)    menu_trigger ;;
+        reminder)   menu_trigger_reminder ;;
+        capture)
+          case "${3:-}" in
+            screenrecord|record) menu_trigger_capture_screenrecord ;;
+            *)          menu_trigger_capture ;;
+          esac ;;
+        transcode)  action_trigger_transcode ;;
+        share)      menu_trigger_share ;;
+        toggle)     menu_trigger_toggle ;;
+        hardware)   menu_trigger_hardware ;;
+        *)          menu_trigger ;;
+      esac ;;
+    style)          menu_style ;;
+    setup)
+      case "${2:-}" in
+        sleep)      menu_setup_sleep ;;
+        *)          menu_setup ;;
+      esac ;;
+    install)        menu_install ;;
+    remove)         menu_remove ;;
+    update)
+      case "${2:-}" in
+        process)    menu_update_process ;;
+        hardware)   menu_update_hardware ;;
+        *)          menu_update ;;
+      esac ;;
+    about)          menu_about ;;
+    system)         menu_system ;;
+    -h|--help|help)
+      cat <<'EOF'
+sus-menu — nested picker control menu (vicinae/fuzzel dmenu).
+
+Usage:
+  sus-menu                       open the top-level menu
+  sus-menu <category> [sub]      deep-link into a sub-tree
+
+Categories: apps learn trigger style setup install remove update about system
+Deep links: trigger capture | trigger capture record | trigger share
+            trigger toggle | trigger hardware | trigger reminder
+            setup sleep | update process | update hardware
+
+Env:
+  PICKER    picker command (default "vicinae dmenu"; e.g. "fuzzel --dmenu")
+  TERMINAL  terminal for TUI actions (default "ghostty")
+EOF
+      ;;
+    *)
+      echo "sus-menu: unknown command '$1' (try --help)" >&2
+      exit 2 ;;
+  esac
+}
+
+main "$@"
+

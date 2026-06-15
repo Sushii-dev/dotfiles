@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# sus-install - paru + fzf fuzzy package installer with curated categories.
+#
+# Usage:
+#   sus-install                 # fuzzy-pick any repo/AUR package(s), multi-select
+#   sus-install <category>      # curated list for that category, multi-select
+#
+# Categories (curated lists feed the Install>* sus-menu leaves):
+#   tui service development editor terminal browser ai gaming
+#
+# After install, optionally records the chosen packages into the chezmoi
+# package list per this repo's convention (.package-list + the PACMAN_PKGS /
+# AUR_PKGS arrays in run_onchange_install-packages.sh.tmpl). Safe + idempotent;
+# skips gracefully if the chezmoi source files are not found.
+
+set -euo pipefail
+
+PARU=paru
+FZF=fzf
+
+_need() { command -v "$1" >/dev/null 2>&1 || { echo "sus-install: missing required tool: $1" >&2; exit 127; }; }
+_need "$PARU"
+_need "$FZF"
+
+# chezmoi source paths (resolved live, not hardcoded to a hostname).
+CHEZMOI_SRC="$( (chezmoi source-path 2>/dev/null) || echo "$HOME/.local/share/chezmoi" )"
+PKG_LIST="$CHEZMOI_SRC/.package-list"
+INSTALL_TMPL="$CHEZMOI_SRC/run_onchange_install-packages.sh.tmpl"
+
+# --- curated category lists ---------------------------------------------------
+# Each prints newline-separated package names. AUR/repo mix is fine; paru sorts
+# it out. Keep these in sync with the adaptation map's Install>* categories.
+_curated() {
+  case "$1" in
+    tui)         printf '%s\n' btop lazygit lazydocker yazi gdu dust htop neovim ncdu fastfetch ;;
+    service)     printf '%s\n' docker tailscale syncthing openssh avahi cups ufw ;;
+    development) printf '%s\n' rustup go nodejs npm python uv docker podman gcc clang cmake jdk-openjdk github-cli ;;
+    editor)      printf '%s\n' neovim helix code zed emacs-wayland micro nano sublime-text-4 ;;
+    terminal)    printf '%s\n' ghostty kitty alacritty wezterm foot konsole ;;
+    browser)     printf '%s\n' firefox chromium brave-bin google-chrome vivaldi librewolf-bin zen-browser-bin ;;
+    ai)          printf '%s\n' ollama-cuda lmstudio-bin open-webui aichat crush-bin ;;
+    gaming)      printf '%s\n' steam lutris heroic-games-launcher-bin mangohud gamescope gamemode protonup-qt vkbasalt goverlay ;;
+    *)           return 1 ;;
+  esac
+}
+
+CATEGORY="${1:-}"
+
+# --- build the candidate list -------------------------------------------------
+if [[ -n "$CATEGORY" ]]; then
+  if ! candidates="$(_curated "$CATEGORY")"; then
+    echo "sus-install: unknown category '$CATEGORY'" >&2
+    echo "valid: tui service development editor terminal browser ai gaming" >&2
+    exit 2
+  fi
+  PROMPT="install (${CATEGORY})> "
+else
+  echo "sus-install: loading repo + AUR package index (paru -Slq)..." >&2
+  candidates="$($PARU -Slq)"
+  PROMPT="install> "
+fi
+
+# --- fuzzy multi-select with live preview ------------------------------------
+# TAB toggles selection; preview pane shows `paru -Si {}` for the highlighted
+# package. Selection is newline-separated package names.
+selection="$(printf '%s\n' "$candidates" \
+  | $FZF --multi \
+         --prompt="$PROMPT" \
+         --header=$'TAB: multi-select  ENTER: install  ESC: cancel' \
+         --preview='paru -Si {1} 2>/dev/null || echo "(no package info)"' \
+         --preview-window='right,60%,wrap' \
+  || true)"
+
+# Normalize to a clean array.
+mapfile -t pkgs < <(printf '%s\n' "$selection" | sed '/^[[:space:]]*$/d')
+if [[ ${#pkgs[@]} -eq 0 ]]; then
+  echo "sus-install: nothing selected, aborting." >&2
+  exit 0
+fi
+
+echo "sus-install: installing: ${pkgs[*]}"
+if ! $PARU -S --needed "${pkgs[@]}"; then
+  echo "sus-install: paru reported a failure; not recording to chezmoi." >&2
+  exit 1
+fi
+
+# --- optional: record into chezmoi package list (idempotent) -----------------
+# Only the packages that are now actually installed get recorded, and only if
+# not already present. Repo vs AUR is decided per-package via pacman -Si (repo)
+# so they land in the right array.
+if [[ ! -f "$PKG_LIST" || ! -f "$INSTALL_TMPL" ]]; then
+  echo "sus-install: chezmoi package files not found under $CHEZMOI_SRC -- skipping recording." >&2
+  exit 0
+fi
+
+read -r -p "Record these packages into chezmoi ($PKG_LIST + install tmpl)? [y/N] " ans || ans=""
+case "$ans" in
+  y|Y|yes|YES) : ;;
+  *) echo "sus-install: skipped chezmoi recording."; exit 0 ;;
+esac
+
+# Classify each package: repo (pacman knows it) -> PACMAN_PKGS, else -> AUR_PKGS.
+repo_new=()
+aur_new=()
+for p in "${pkgs[@]}"; do
+  # already recorded in .package-list? skip (idempotent)
+  if grep -qxF "$p" "$PKG_LIST" 2>/dev/null; then continue; fi
+  if grep -qE "^[[:space:]]*${p}([[:space:]]|\$)" "$PKG_LIST" 2>/dev/null; then continue; fi
+  # already present as an array item in the install template? skip (idempotent).
+  # Two shapes: a bare indented item ("    foo") OR a hostname-conditional
+  # single-line append ("PACMAN_PKGS+=(foo)" / "AUR_PKGS+=(foo)").
+  if grep -qE "^[[:space:]]+${p}[[:space:]]*\$" "$INSTALL_TMPL" 2>/dev/null; then continue; fi
+  if grep -qE "^(PACMAN_PKGS|AUR_PKGS)\+=\(${p}\)" "$INSTALL_TMPL" 2>/dev/null; then continue; fi
+  # repo vs AUR: prefer official-repo membership (less sync-state dependent),
+  # fall back to pacman -Si.
+  if pacman -Slq 2>/dev/null | grep -qxF "$p" || pacman -Si "$p" >/dev/null 2>&1; then
+    repo_new+=("$p")
+  else
+    aur_new+=("$p")
+  fi
+done
+
+if [[ ${#repo_new[@]} -eq 0 && ${#aur_new[@]} -eq 0 ]]; then
+  echo "sus-install: all selected packages already recorded in chezmoi. Nothing to do."
+  exit 0
+fi
+
+# 1) Append to .package-list (human list, drives install-script re-run hash).
+{
+  for p in "${repo_new[@]}"; do printf '%s\n' "$p"; done
+  for p in "${aur_new[@]}"; do printf '%s\n' "$p"; done
+} >> "$PKG_LIST"
+
+# 2) Inject into the PACMAN_PKGS=( ... ) and AUR_PKGS=( ... ) arrays in the
+#    install template. We insert before the array's closing ')' on its own line.
+_inject_array() {
+  # $1 = array name, remaining = packages
+  local arr="$1"; shift
+  local items=("$@")
+  [[ ${#items[@]} -eq 0 ]] && return 0
+  local lines=""
+  for p in "${items[@]}"; do lines+="    ${p}\n"; done
+  # awk: inside the target array block, print our additions just before the
+  # block's closing ')'. Opening anchor tolerates inline items after '('; the
+  # closing anchor tolerates leading whitespace before ')'.
+  awk -v arr="$arr" -v add="$lines" '
+    $0 ~ "^" arr "=\\(" { inblock=1 }
+    inblock && $0 ~ "^[[:space:]]*\\)" {
+      printf "%s", add;
+      print; inblock=0; next
+    }
+    { print }
+  ' "$INSTALL_TMPL" > "${INSTALL_TMPL}.tmp" \
+    || { rm -f "${INSTALL_TMPL}.tmp"; echo "sus-install: awk inject failed for $arr" >&2; return 1; }
+  # Assert every item actually landed BEFORE clobbering the original; if the
+  # array anchors didn't match, leave the template untouched rather than
+  # silently dropping packages.
+  local q
+  for q in "${items[@]}"; do
+    if ! grep -qE "^[[:space:]]+${q}[[:space:]]*\$" "${INSTALL_TMPL}.tmp"; then
+      rm -f "${INSTALL_TMPL}.tmp"
+      echo "sus-install: '$q' did not land in $arr (anchors unmatched); $INSTALL_TMPL left untouched." >&2
+      return 1
+    fi
+  done
+  mv "${INSTALL_TMPL}.tmp" "$INSTALL_TMPL"
+}
+
+_inject_array PACMAN_PKGS "${repo_new[@]}"
+_inject_array AUR_PKGS "${aur_new[@]}"
+
+echo "sus-install: recorded -> repo: [${repo_new[*]:-none}]  aur: [${aur_new[*]:-none}]"
+echo "sus-install: review with 'chezmoi diff' then commit + push the chezmoi repo."
+

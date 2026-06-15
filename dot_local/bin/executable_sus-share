@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+#
+# sus-share — quick ephemeral share via 0x0.st
+#
+# Subcommands:
+#   clipboard   Upload current clipboard (text -> .txt, image -> image bytes)
+#   file        Prompt for a file path and upload it
+#   folder      Prompt for a folder path and upload it as a .tar.gz
+#
+# The returned URL is placed on the clipboard and shown via notify-send.
+
+set -euo pipefail
+
+readonly UPLOAD_HOST="https://0x0.st"
+readonly USER_AGENT="sus-share/1.0 (+https://0x0.st)"
+readonly APP_NAME="sus-share"
+
+# --- helpers ---------------------------------------------------------------
+
+# notify <urgency> <summary> <body>
+notify() {
+  local urgency="$1" summary="$2" body="$3"
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send -a "$APP_NAME" -u "$urgency" "$summary" "$body" || true
+  fi
+}
+
+# die <message>  — stderr + notification, then non-zero exit
+die() {
+  local msg="$1"
+  printf '%s: %s\n' "$APP_NAME" "$msg" >&2
+  notify critical "$APP_NAME failed" "$msg"
+  exit 1
+}
+
+# expand_tilde <path>  — expand a leading ~ to $HOME (read -e does not do this)
+expand_tilde() {
+  local p="$1"
+  local tilde='~'
+  if [[ "$p" == "$tilde" ]]; then
+    printf '%s' "$HOME"
+  elif [[ "${p:0:1}" == "$tilde" && "${p:1:1}" == "/" ]]; then
+    printf '%s/%s' "$HOME" "${p:2}"
+  else
+    printf '%s' "$p"
+  fi
+}
+
+# require <binary> [binary...]  — fail gracefully if any are missing
+require() {
+  local bin
+  for bin in "$@"; do
+    if ! command -v "$bin" >/dev/null 2>&1; then
+      die "required command '$bin' not found in PATH"
+    fi
+  done
+}
+
+# upload [extra curl -F args...]  — reads body from stdin, echoes the URL.
+# Caller supplies the file part (e.g. 'file=@-;type=...;filename=...').
+upload() {
+  local url
+  if ! url="$(curl --fail --silent --show-error \
+    --user-agent "$USER_AGENT" \
+    "$@" \
+    "$UPLOAD_HOST")"; then
+    die "upload to $UPLOAD_HOST failed"
+  fi
+
+  url="${url%$'\n'}"
+  url="${url%%$'\r'}"
+
+  if [[ -z "$url" || "$url" != http* ]]; then
+    die "unexpected response from $UPLOAD_HOST: ${url:-<empty>}"
+  fi
+
+  printf '%s\n' "$url"
+}
+
+# publish <url> <label>  — URL to clipboard + success notification
+publish() {
+  local url="$1" label="$2"
+  if printf '%s' "$url" | wl-copy; then
+    notify normal "$APP_NAME" "$label uploaded — URL copied"$'\n'"$url"
+    printf '%s\n' "$url"
+  else
+    # Upload succeeded; clipboard did not. Still surface the URL.
+    notify normal "$APP_NAME" "$label uploaded (clipboard copy failed)"$'\n'"$url"
+    printf '%s\n' "$url"
+  fi
+}
+
+# --- subcommands -----------------------------------------------------------
+
+cmd_clipboard() {
+  require curl wl-paste wl-copy
+
+  local types
+  types="$(wl-paste --list-types 2>/dev/null || true)"
+  if [[ -z "$types" ]]; then
+    die "clipboard is empty"
+  fi
+
+  # Prefer an image type if one is offered.
+  local image_type=""
+  image_type="$(printf '%s\n' "$types" | grep -m1 -E '^image/' || true)"
+
+  local url
+  if [[ -n "$image_type" ]]; then
+    local ext="${image_type##*/}"
+    ext="${ext%%;*}"
+    ext="${ext//+/_}"
+    [[ -n "$ext" ]] || ext="bin"
+
+    if ! url="$(wl-paste --no-newline --type "$image_type" \
+      | upload -F "file=@-;type=${image_type};filename=clipboard.${ext}")"; then
+      exit 1
+    fi
+    publish "$url" "Clipboard image"
+  else
+    local text
+    text="$(wl-paste --no-newline 2>/dev/null || true)"
+    if [[ -z "$text" ]]; then
+      die "clipboard has no usable text or image content"
+    fi
+    if ! url="$(printf '%s' "$text" \
+      | upload -F 'file=@-;type=text/plain;filename=clipboard.txt')"; then
+      exit 1
+    fi
+    publish "$url" "Clipboard text"
+  fi
+}
+
+cmd_file() {
+  require curl wl-copy
+
+  local path
+  read -r -e -p "File to share: " path || exit 0
+  [[ -n "$path" ]] || exit 0
+
+  path="$(expand_tilde "$path")"
+
+  [[ -e "$path" ]] || die "no such file: $path"
+  [[ -f "$path" ]] || die "not a regular file: $path"
+  [[ -r "$path" ]] || die "file is not readable: $path"
+
+  local name
+  name="$(basename -- "$path")"
+
+  local url
+  if ! url="$(upload -F "file=@${path};filename=${name}")"; then
+    exit 1
+  fi
+  publish "$url" "File ${name}"
+}
+
+cmd_folder() {
+  require curl wl-copy tar
+
+  local path
+  read -r -e -p "Folder to share: " path || exit 0
+  [[ -n "$path" ]] || exit 0
+
+  path="$(expand_tilde "$path")"
+
+  [[ -e "$path" ]] || die "no such folder: $path"
+  [[ -d "$path" ]] || die "not a directory: $path"
+  [[ -r "$path" ]] || die "directory is not readable: $path"
+
+  # Strip any trailing slashes, then split into parent + base.
+  local clean="${path%/}"
+  [[ -n "$clean" ]] || clean="/"
+
+  local parent base
+  parent="$(dirname -- "$clean")"
+  base="$(basename -- "$clean")"
+
+  local url
+  if ! url="$(tar czf - -C "$parent" -- "$base" \
+    | upload -F "file=@-;type=application/gzip;filename=${base}.tar.gz")"; then
+    exit 1
+  fi
+  publish "$url" "Folder ${base}.tar.gz"
+}
+
+usage() {
+  cat <<'EOF'
+sus-share — quick ephemeral share via 0x0.st
+
+Usage:
+  sus-share clipboard    Upload current clipboard (text or image)
+  sus-share file         Prompt for a file path and upload it
+  sus-share folder       Prompt for a folder path and upload it (.tar.gz)
+
+The resulting URL is copied to the clipboard and shown as a notification.
+EOF
+}
+
+main() {
+  local sub="${1:-}"
+  case "$sub" in
+    clipboard) cmd_clipboard ;;
+    file) cmd_file ;;
+    folder) cmd_folder ;;
+    -h | --help | help | "") usage ;;
+    *)
+      printf '%s: unknown subcommand: %s\n\n' "$APP_NAME" "$sub" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+}
+
+main "$@"

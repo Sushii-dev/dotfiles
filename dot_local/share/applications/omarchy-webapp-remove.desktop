@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Remove Web App
+Comment=Remove a web app desktop launcher (Omarchy)
+Exec=ghostty -e omarchy-webapp-remove
+Icon=edit-delete
+Terminal=false
+Categories=Utility;
+StartupNotify=true
+Keywords=webapp;web app;remove;delete;omarchy;

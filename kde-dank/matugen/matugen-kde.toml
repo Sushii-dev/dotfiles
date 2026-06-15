@@ -1,0 +1,17 @@
+# kde-dank :: matugen config block
+#
+# Append this to ~/.config/matugen/config.toml (you already have one for DMS).
+# Copy templates/kde-dank.colors to ~/.config/matugen/templates/ first.
+#
+# Generates a KDE color scheme from the same wallpaper palette DMS uses,
+# then applies it. The Breeze flip-flop in post_hook forces Plasma to
+# reload the scheme (plasma-apply-colorscheme caches by name).
+
+[templates.kde]
+input_path = "~/.config/matugen/templates/kde-dank.colors"
+output_path = "~/.local/share/color-schemes/DankMatugen.colors"
+post_hook = "plasma-apply-colorscheme BreezeDark > /dev/null 2>&1; plasma-apply-colorscheme DankMatugen > /dev/null 2>&1"
+
+# Note: post_hook fires inside the KDE session only if matugen runs there.
+# If you run matugen from niri and just want the scheme file ready for the
+# next Plasma login, drop the post_hook line, the file alone is enough.

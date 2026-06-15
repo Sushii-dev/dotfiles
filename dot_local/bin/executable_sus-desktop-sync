@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# sus-desktop-sync - generate one .desktop launcher per `sus --list` entry.
+#
+# Rationale: a single "Sus Menu.desktop" surfaces only the menu in vicinae/KDE.
+# But the whole design is picker-first, so it's far more useful to let vicinae
+# fuzzy-match individual actions ('install', 'menu', ...) directly. This writes
+# one sus-<name>.desktop per registry entry and prunes stale ones, so the set
+# stays in sync with `sus --list` with zero manual upkeep.
+#
+# Run after `chezmoi apply`, or wire via a chezmoi run_after_ script.
+
+set -euo pipefail
+
+APPS_DIR="${HOME}/.local/share/applications"
+PREFIX="sus-"
+mkdir -p "$APPS_DIR"
+
+command -v sus >/dev/null 2>&1 || { echo "sus-desktop-sync: 'sus' not on PATH" >&2; exit 127; }
+
+# Subcommands that are fzf/TUI-based and must run inside a terminal window.
+# (menu is graphical-picker-based, so it does NOT need a terminal.)
+_needs_terminal() {
+  case "$1" in
+    install) return 0 ;;
+    *)       return 1 ;;
+  esac
+}
+
+declare -A KEEP=()
+
+while IFS=$'\t' read -r name desc; do
+  [[ -z "$name" ]] && continue
+  # skip pseudo/help entries that aren't real launchable actions
+  case "$name" in help) continue ;; esac
+
+  file="${APPS_DIR}/${PREFIX}${name}.desktop"
+  KEEP["${PREFIX}${name}.desktop"]=1
+
+  if _needs_terminal "$name"; then
+    exec_line="ghostty -e sus ${name}"
+    term="false" # ghostty IS the terminal; Terminal=false so the launcher doesn't double-wrap
+  else
+    exec_line="sus ${name}"
+    term="false"
+  fi
+
+  cat > "$file" <<EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=sus: ${name}
+GenericName=sus action
+Comment=${desc}
+Exec=${exec_line}
+Terminal=${term}
+Categories=Utility;
+Keywords=sus;menu;${name};
+StartupNotify=true
+NoDisplay=false
+EOF
+  chmod +x "$file"
+done < <(sus --list)
+
+# Prune stale sus-*.desktop files no longer in the registry.
+for f in "$APPS_DIR"/${PREFIX}*.desktop; do
+  [[ -e "$f" ]] || continue
+  base="$(basename "$f")"
+  if [[ -z "${KEEP[$base]:-}" ]]; then
+    rm -f "$f"
+    echo "sus-desktop-sync: pruned stale $base"
+  fi
+done
+
+# Refresh KDE's app cache so new entries appear without a relogin.
+if command -v kbuildsycoca6 >/dev/null 2>&1; then
+  kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
+fi
+
+echo "sus-desktop-sync: wrote launchers to $APPS_DIR"
+

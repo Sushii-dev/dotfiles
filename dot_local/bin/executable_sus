@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# sus - personal command dispatcher (Omarchy 'omarchy' menu/CLI replacement)
+#
+# Design: thin dispatcher. For any `sus <cmd> [args]`, if an executable
+#   ~/.local/bin/sus-<cmd> exists, exec it (so the tree is extensible by just
+#   dropping a sus-<cmd> script in chezmoi). Otherwise fall back to the
+#   built-in subcommands below.
+#
+# Built-ins are kept minimal on purpose; the heavy lifting lives in the
+# sus-* helper scripts (sus-menu, sus-install, sus-reminder, sus-share, ...).
+
+set -euo pipefail
+
+BIN_DIR="${HOME}/.local/bin"
+SELF="sus"
+
+# --- subcommand registry -----------------------------------------------------
+# Single source of truth for `--list` (machine-readable, TAB-separated) and
+# `help` (human). Keep names in sync with the sus-<name> scripts / built-ins.
+# Format per line: name<TAB>description
+_registry() {
+  cat <<'EOF'
+menu	Open the sus action menu (picker-driven tree)
+install	Fuzzy package installer (paru + fzf) and curated install categories
+comfyui	Launch ComfyUI (wrapper around ~/.local/bin/comfyui)
+forge	Launch Forge Neo SD WebUI (wrapper around ~/.local/bin/forge)
+webapp	Install a web app launcher (wrapper around omarchy-webapp-install)
+help	Show this help
+EOF
+}
+
+_die() { printf '%s: %s\n' "$SELF" "$1" >&2; exit "${2:-1}"; }
+
+_print_help() {
+  printf 'Usage: %s <command> [args...]\n\n' "$SELF"
+  printf 'Commands:\n'
+  # pad names to a column for readability
+  while IFS=$'\t' read -r name desc; do
+    printf '  %-10s %s\n' "$name" "$desc"
+  done < <(_registry)
+  printf '\nAny "%s <name>" also runs ~/.local/bin/%s-<name> if present.\n' "$SELF" "$SELF"
+}
+
+# --- arg parsing -------------------------------------------------------------
+if [[ $# -eq 0 ]]; then
+  # No args -> open the menu (most common interactive use, matches Omarchy).
+  cmd="menu"
+else
+  cmd="$1"; shift
+fi
+
+case "$cmd" in
+  --list)
+    # Machine-readable: consumed by the fish completion and sus-desktop-sync.
+    _registry
+    exit 0
+    ;;
+  -h|--help|help)
+    _print_help
+    exit 0
+    ;;
+  --version)
+    printf '%s (chezmoi-managed personal dispatcher)\n' "$SELF"
+    exit 0
+    ;;
+esac
+
+# 1) Prefer an external sus-<cmd> helper if it exists and is executable.
+helper="${BIN_DIR}/${SELF}-${cmd}"
+if [[ -x "$helper" ]]; then
+  exec "$helper" "$@"
+fi
+# Also honor a sus-<cmd> found anywhere on PATH (e.g. /usr/bin) as a fallback.
+if command -v "${SELF}-${cmd}" >/dev/null 2>&1; then
+  exec "${SELF}-${cmd}" "$@"
+fi
+
+# 2) Built-in pass-through wrappers for existing tooling.
+case "$cmd" in
+  menu)
+    # Should normally be caught by the sus-menu helper above; fall back to a
+    # clear error if the menu script isn't installed yet.
+    _die "sus-menu not found in ${BIN_DIR} (run 'chezmoi apply')" 127
+    ;;
+  install)
+    _die "sus-install not found in ${BIN_DIR} (run 'chezmoi apply')" 127
+    ;;
+  comfyui)
+    command -v comfyui >/dev/null 2>&1 || _die "comfyui launcher not found on PATH" 127
+    exec comfyui "$@"
+    ;;
+  forge)
+    command -v forge >/dev/null 2>&1 || _die "forge launcher not found on PATH" 127
+    exec forge "$@"
+    ;;
+  webapp)
+    command -v omarchy-webapp-install >/dev/null 2>&1 \
+      || _die "omarchy-webapp-install not found on PATH" 127
+    exec omarchy-webapp-install "$@"
+    ;;
+  *)
+    printf '%s: unknown command %q\n\n' "$SELF" "$cmd" >&2
+    _print_help >&2
+    exit 127
+    ;;
+esac
+

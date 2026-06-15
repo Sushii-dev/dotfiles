@@ -16,7 +16,17 @@ TOP_LEVEL = {
 # Plugins we explicitly enable/disable for DMS theming & usability
 PLUGIN_OVERRIDES = {
     "AlwaysAnimate": {"enabled": True},
-    "BetterFolders": {"enabled": True},
+    "BetterFolders": {
+        "enabled": True,
+        "closeOthers": True,
+        "closeAllFolders": False,
+        "closeAllHomeButton": True,
+        "forceOpen": False,
+        "sidebar": False,
+        "sidebarAnim": False,
+        "showFolderIcon": 1,
+        "keepIcons": False,
+    },
     "BiggerStreamPreview": {"enabled": True},
     "PlainFolderIcon": {"enabled": True},
     "VolumeBooster": {"enabled": True},

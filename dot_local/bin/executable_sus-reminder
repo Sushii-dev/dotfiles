@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+# sus-reminder — one-shot timed desktop reminders via systemd --user transient timers.
+#
+# Subcommands:
+#   set    Prompt (via $PICKER) for minutes + message, then schedule a transient
+#          timer that fires notify-send when it elapses.
+#   show   List active sus-reminder timers, human readable.
+#   clear  Stop and reset all sus-reminder transient units.
+#
+# Pure systemd + notify-send. No external deps beyond systemd-run/systemctl/notify-send.
+set -euo pipefail
+
+UNIT_PREFIX="sus-reminder"
+APP_NAME="sus-reminder"
+
+# --- helpers ---------------------------------------------------------------
+
+# Emit an error to stderr and (best effort) to the desktop, then exit non-zero.
+die() {
+  local msg="$1"
+  printf '%s: %s\n' "$APP_NAME" "$msg" >&2
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send -u critical -a "$APP_NAME" "$APP_NAME" "$msg" >/dev/null 2>&1 || true
+  fi
+  exit 1
+}
+
+# Ensure a required binary exists; otherwise die clearly.
+require() {
+  local bin="$1"
+  command -v "$bin" >/dev/null 2>&1 || die "required command not found: $bin"
+}
+
+# Build the picker argv into the global PICKER_CMD array.
+# Honours $PICKER (default 'vicinae dmenu'); only vicinae gets -n <title>.
+build_picker() {
+  local title="$1" placeholder="$2"
+  local picker="${PICKER:-vicinae dmenu}"
+  read -r -a PICKER_CMD <<<"$picker"
+  if [[ ${#PICKER_CMD[@]} -eq 0 ]]; then
+    die "PICKER is empty"
+  fi
+  require "${PICKER_CMD[0]}"
+  if [[ "${PICKER_CMD[0]}" == vicinae ]]; then
+    PICKER_CMD+=(-n "$title" -p "$placeholder")
+  else
+    PICKER_CMD+=(-p "$placeholder")
+  fi
+}
+
+# --- subcommands -----------------------------------------------------------
+
+cmd_set() {
+  require systemd-run
+  require notify-send
+
+  local minutes message
+  build_picker "Reminder" "Minutes from now…"
+  # Cancelling the picker (Esc) returns non-zero / empty — treat as no-op.
+  minutes="$("${PICKER_CMD[@]}" </dev/null)" || exit 0
+  minutes="${minutes//[[:space:]]/}"
+  [[ -n "$minutes" ]] || exit 0
+  if ! [[ "$minutes" =~ ^[1-9][0-9]*$ ]]; then
+    die "minutes must be a positive integer, got: $minutes"
+  fi
+
+  build_picker "Reminder" "What should I remind you?"
+  message="$("${PICKER_CMD[@]}" </dev/null)" || exit 0
+  [[ -n "$message" ]] || exit 0
+
+  local unit
+  unit="${UNIT_PREFIX}-$(date +%s)"
+  # Forward the graphical session env captured now into the timer, so the timer's
+  # notify-send can reach the desktop even if the user manager hasn't imported it
+  # (fresh session before `systemctl --user import-environment`).
+  local -a env_args=()
+  [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]] && env_args+=(--setenv="DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS")
+  [[ -n "${WAYLAND_DISPLAY:-}" ]] && env_args+=(--setenv="WAYLAND_DISPLAY=$WAYLAND_DISPLAY")
+  [[ -n "${DISPLAY:-}" ]] && env_args+=(--setenv="DISPLAY=$DISPLAY")
+  systemd-run --user \
+    --on-active="${minutes}m" \
+    --unit="$unit" \
+    --timer-property=AccuracySec=1s \
+    "${env_args[@]}" \
+    notify-send -u critical -a Reminder "Reminder" "$message" >/dev/null
+
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send -a "$APP_NAME" "Reminder set" \
+      "In ${minutes}m: ${message}" >/dev/null 2>&1 || true
+  fi
+  printf 'scheduled %s in %sm: %s\n' "$unit" "$minutes" "$message"
+}
+
+cmd_show() {
+  require systemctl
+
+  local timers
+  # --all so inactive-but-scheduled entries still show; filter to our prefix.
+  timers="$(systemctl --user list-timers --all --no-legend 2>/dev/null || true)"
+
+  local matched
+  matched="$(printf '%s\n' "$timers" | grep -- "${UNIT_PREFIX}-" || true)"
+
+  if [[ -z "$matched" ]]; then
+    printf 'No active %s reminders.\n' "$APP_NAME"
+    return 0
+  fi
+
+  printf 'Active %s reminders:\n' "$APP_NAME"
+  # Columns from list-timers --no-legend:
+  #   NEXT (5 fields) LEFT LAST (5 fields) PASSED UNIT ACTIVATES
+  # Print the fire-time (NEXT) and the unit; robust to spacing via awk.
+  printf '%s\n' "$matched" | awk '
+    {
+      unit = ""
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /'"${UNIT_PREFIX}"'-/) { unit = $i; break }
+      }
+      next_time = $1 " " $2 " " $3 " " $4 " " $5
+      printf "  %-26s fires: %s\n", unit, next_time
+    }'
+}
+
+cmd_clear() {
+  require systemctl
+
+  # Collect both timer and service units matching our prefix.
+  local units
+  units="$(systemctl --user list-units --all --no-legend --plain \
+    "${UNIT_PREFIX}-*" 2>/dev/null | awk '{print $1}' || true)"
+
+  if [[ -z "$units" ]]; then
+    printf 'No %s reminders to clear.\n' "$APP_NAME"
+    return 0
+  fi
+
+  local count=0 unit
+  while IFS= read -r unit; do
+    [[ -n "$unit" ]] || continue
+    systemctl --user stop "$unit" >/dev/null 2>&1 || true
+    systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
+    count=$((count + 1))
+  done <<<"$units"
+
+  printf 'Cleared %d %s unit(s).\n' "$count" "$APP_NAME"
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send -a "$APP_NAME" "Reminders cleared" \
+      "Removed ${count} reminder unit(s)." >/dev/null 2>&1 || true
+  fi
+}
+
+usage() {
+  cat <<EOF
+Usage: $APP_NAME <set|show|clear>
+
+  set    Prompt for minutes + message, then schedule a one-shot reminder.
+  show   List active reminders.
+  clear  Cancel all pending reminders.
+EOF
+}
+
+# --- dispatch --------------------------------------------------------------
+
+main() {
+  local sub="${1:-}"
+  case "$sub" in
+    set) cmd_set ;;
+    show) cmd_show ;;
+    clear) cmd_clear ;;
+    -h | --help | help | "") usage ;;
+    *)
+      usage >&2
+      die "unknown subcommand: $sub"
+      ;;
+  esac
+}
+
+main "$@"

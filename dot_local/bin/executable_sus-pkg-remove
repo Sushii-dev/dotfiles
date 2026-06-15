@@ -1,0 +1,211 @@
+#!/usr/bin/env bash
+#
+# sus-pkg-remove — fuzzy uninstaller (mirror of sus-install, in reverse).
+#
+# Pick explicitly-installed packages with fzf (multi-select via TAB, live
+# `pacman -Qi` preview), uninstall the selection with `paru -Rns` after a
+# confirmation, then un-record each removed package from the chezmoi sources
+# so the package set stays in sync across machines:
+#   - the flat `.package-list`
+#   - the PACMAN_PKGS=( ... ) / AUR_PKGS=( ... ) arrays in
+#     run_onchange_install-packages.sh.tmpl
+#
+# The chezmoi step is best-effort and idempotent: a package absent from a file
+# is silently skipped, and every edit is verified before the temp file is moved
+# into place — on any verification failure the original file is left untouched.
+#
+# DE-agnostic (no compositor-specific calls). notify-send is used for the
+# missing-dependency path only, since this is a TUI helper run in a terminal.
+
+set -euo pipefail
+
+# --- notify helper (best-effort; never aborts the script) --------------------
+notify() {
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send -a sus-pkg-remove "$@" >/dev/null 2>&1 || true
+  fi
+}
+
+# --- hard dependency check ---------------------------------------------------
+die_missing() {
+  local bin="$1"
+  printf 'sus-pkg-remove: required command not found: %s\n' "$bin" >&2
+  notify "Missing dependency" "Required command not found: $bin"
+  exit 1
+}
+
+for bin in pacman paru fzf; do
+  command -v "$bin" >/dev/null 2>&1 || die_missing "$bin"
+done
+
+# --- gather explicitly-installed packages and pick ---------------------------
+# fzf returns non-zero when the user cancels (Esc / Ctrl-C); treat that as a
+# clean no-op exit rather than letting `set -e` abort.
+mapfile -t selected < <(
+  pacman -Qqe | fzf \
+    --multi \
+    --prompt='remove > ' \
+    --header=$'TAB: select  ENTER: confirm  ESC: cancel\nMulti-select packages to uninstall' \
+    --preview='pacman -Qi {1}' \
+    --preview-window='right:60%:wrap' \
+    || true
+)
+
+if ((${#selected[@]} == 0)); then
+  printf 'sus-pkg-remove: nothing selected, aborting.\n' >&2
+  exit 0
+fi
+
+printf 'Packages to remove (paru -Rns):\n'
+printf '  %s\n' "${selected[@]}"
+printf '\n'
+
+read -r -p "Proceed with removal? [y/N] " reply || exit 0
+case "${reply,,}" in
+  y | yes) ;;
+  *)
+    printf 'sus-pkg-remove: cancelled.\n' >&2
+    exit 0
+    ;;
+esac
+
+# --- uninstall ---------------------------------------------------------------
+# paru handles privilege escalation itself. -R remove, -n purge config files,
+# -s remove now-orphaned dependencies.
+if ! paru -Rns -- "${selected[@]}"; then
+  printf 'sus-pkg-remove: paru -Rns failed; chezmoi sources left unchanged.\n' >&2
+  notify "Removal failed" "paru -Rns reported an error"
+  exit 1
+fi
+
+printf '\nsus-pkg-remove: removed %d package(s).\n' "${#selected[@]}"
+
+# --- resolve chezmoi source --------------------------------------------------
+chezmoi_src=""
+if command -v chezmoi >/dev/null 2>&1; then
+  chezmoi_src="$(chezmoi source-path 2>/dev/null || true)"
+fi
+if [[ -z "$chezmoi_src" || ! -d "$chezmoi_src" ]]; then
+  chezmoi_src="$HOME/.local/share/chezmoi"
+fi
+
+if [[ ! -d "$chezmoi_src" ]]; then
+  printf 'sus-pkg-remove: chezmoi source not found, skipping un-record step.\n'
+  exit 0
+fi
+
+pkglist="$chezmoi_src/.package-list"
+tmpl="$chezmoi_src/run_onchange_install-packages.sh.tmpl"
+
+# escape a string for safe literal use inside an ERE pattern (every grep below
+# uses -E). Must escape ERE metachars too: + ? ( ) { } | in addition to BRE's.
+ere_escape() {
+  printf '%s' "$1" | sed 's/[][\.*^$/+?(){}|]/\\&/g'
+}
+
+# remove_from_package_list <pkg>
+#
+# Matches the package as a standalone first token, tolerating an optional
+# trailing annotation such as "pkgname (Sushitop only)". The leading anchor and
+# the (space|paren|end) lookahead-style alternation keep "foo" from matching
+# "foobar" or "libfoo".
+#
+# Return codes: 0 = a line was removed; 2 = nothing to do (not present / no
+# file); 1 = a real failure (edit attempted but could not be verified).
+remove_from_package_list() {
+  local pkg="$1" esc tmp
+  [[ -f "$pkglist" ]] || return 2
+  esc="$(ere_escape "$pkg")"
+
+  grep -Eq "^${esc}([[:space:]]+\(.*\))?[[:space:]]*$" "$pkglist" || return 2
+
+  tmp="$(mktemp "${pkglist}.XXXXXX")"
+  if ! grep -Ev "^${esc}([[:space:]]+\(.*\))?[[:space:]]*$" "$pkglist" >"$tmp"; then
+    rm -f "$tmp"
+    printf 'sus-pkg-remove: failed to rewrite .package-list for %s\n' "$pkg" >&2
+    return 1
+  fi
+
+  # Verify the package line is gone and the file is non-empty before swapping.
+  if grep -Eq "^${esc}([[:space:]]+\(.*\))?[[:space:]]*$" "$tmp" || [[ ! -s "$tmp" ]]; then
+    rm -f "$tmp"
+    printf 'sus-pkg-remove: edit verification failed for .package-list (%s), aborting that edit\n' "$pkg" >&2
+    return 1
+  fi
+
+  mv -- "$tmp" "$pkglist"
+  printf 'sus-pkg-remove: un-recorded %s from .package-list\n' "$pkg"
+}
+
+# remove_from_template <pkg>
+#
+# Removes a bare array element line ("    pkgname") from the template. Array
+# entries are plain package names indented with spaces; we only touch lines that
+# are exactly that (no annotations, no parens), so the surrounding bash/Go
+# template scaffolding can never be corrupted.
+#
+# Return codes: 0 = a line was removed; 2 = nothing to do (not present / no
+# file); 1 = a real failure (edit attempted but could not be verified).
+remove_from_template() {
+  local pkg="$1" esc tmp bare appended
+  [[ -f "$tmpl" ]] || return 2
+  esc="$(ere_escape "$pkg")"
+
+  # A package can appear in the template in TWO shapes:
+  #   1) a bare element inside a PACMAN_PKGS=( … ) / AUR_PKGS=( … ) array:
+  #        "    pkgname"
+  #   2) a hostname-conditional single-line append (inside a {{ if … }} block):
+  #        "PACMAN_PKGS+=(pkgname)"  /  "AUR_PKGS+=(pkgname)"
+  # Only matching shape (1) — as the original did — silently desyncs the
+  # templated packages (.package-list loses the line, the += survives), so they
+  # reinstall on the next `chezmoi apply`. Handle both.
+  bare="^[[:space:]]+${esc}[[:space:]]*$"
+  appended="^(PACMAN_PKGS|AUR_PKGS)\\+=\\(${esc}\\)[[:space:]]*$"
+
+  grep -Eq "$bare" "$tmpl" || grep -Eq "$appended" "$tmpl" || return 2
+
+  tmp="$(mktemp "${tmpl}.XXXXXX")"
+  if ! grep -Ev "$bare" "$tmpl" | grep -Ev "$appended" >"$tmp"; then
+    rm -f "$tmp"
+    printf 'sus-pkg-remove: failed to rewrite template for %s\n' "$pkg" >&2
+    return 1
+  fi
+
+  # Verify both shapes are gone, the file is non-empty, and both array openers
+  # survived (sanity guard against a botched edit nuking structure).
+  if grep -Eq "$bare" "$tmp" || grep -Eq "$appended" "$tmp" \
+    || [[ ! -s "$tmp" ]] \
+    || ! grep -q 'PACMAN_PKGS=(' "$tmp" \
+    || ! grep -q 'AUR_PKGS=(' "$tmp"; then
+    rm -f "$tmp"
+    printf 'sus-pkg-remove: edit verification failed for template (%s), aborting that edit\n' "$pkg" >&2
+    return 1
+  fi
+
+  mv -- "$tmp" "$tmpl"
+  printf 'sus-pkg-remove: un-recorded %s from install-packages template\n' "$pkg"
+}
+
+# --- un-record each removed package (best-effort, never fatal) ---------------
+# Helpers return 0 only when a line was actually removed; 2 means "not present"
+# and 1 means a verified-edit failure. Calling them as `if` conditions means a
+# non-zero return is not treated as fatal by `set -e`, so the loop continues
+# across all remaining packages.
+recorded_changes=0
+for pkg in "${selected[@]}"; do
+  if remove_from_package_list "$pkg"; then
+    recorded_changes=1
+  fi
+  if remove_from_template "$pkg"; then
+    recorded_changes=1
+  fi
+done
+
+# --- closing hint ------------------------------------------------------------
+if ((recorded_changes)); then
+  printf '\nChezmoi sources updated. Review with:\n  chezmoi diff\n'
+else
+  printf '\nNo chezmoi-tracked package entries matched; nothing to un-record.\n'
+  printf 'Review anyway with:\n  chezmoi diff\n'
+fi
+

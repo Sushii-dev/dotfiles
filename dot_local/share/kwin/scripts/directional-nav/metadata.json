@@ -1,0 +1,12 @@
+{
+    "KPlugin": {
+        "Id": "directional-nav",
+        "Name": "Directional Navigation",
+        "Description": "Super+arrows focus the nearest window in that direction, crossing monitors at the edge; Super+Shift+arrows move/swap, crossing monitors at the edge",
+        "Version": "1.0",
+        "ServiceTypes": ["KWin/Script"]
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js",
+    "KPackageStructure": "KWin/Script"
+}

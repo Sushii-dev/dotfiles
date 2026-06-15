@@ -19,6 +19,7 @@ OVERRIDES = {
         "smallestReadableFont": "JetBrainsMono Nerd Font,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,Regular",
         "toolBarFont": "JetBrainsMono Nerd Font,11,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,Regular",
         "menuFont": "JetBrainsMono Nerd Font,11,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,Regular",
+        "XCursorSize": "32",
     },
     "Icons": {
         "Theme": "Colloid-Dark",

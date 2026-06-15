@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-penumbra-mod">
+    <comment>Penumbra Mod Package</comment>
+    <comment xml:lang="en">Penumbra Mod Package</comment>
+    <sub-class-of type="application/zip"/>
+    <glob pattern="*.pmp" weight="80"/>
+    <icon name="application-x-penumbra-mod"/>
+  </mime-type>
+  <mime-type type="application/x-textools-mod">
+    <comment>TexTools Mod Package</comment>
+    <comment xml:lang="en">TexTools Mod Package</comment>
+    <sub-class-of type="application/zip"/>
+    <glob pattern="*.ttmp2" weight="80"/>
+    <icon name="application-x-textools-mod"/>
+  </mime-type>
+</mime-info>

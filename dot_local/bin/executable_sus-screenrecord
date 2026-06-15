@@ -1,0 +1,191 @@
+#!/usr/bin/env bash
+# sus-screenrecord - toggle screen recording via gpu-screen-recorder (NVENC).
+# START (default), --desktop-audio, --mic, --stop.
+set -euo pipefail
+
+PID_FILE="${XDG_RUNTIME_DIR:-/tmp}/sus-screenrecord.pid"
+PATH_FILE="${XDG_RUNTIME_DIR:-/tmp}/sus-screenrecord.path"
+
+# notify - send a desktop notification if notify-send exists, else stderr.
+notify() {
+    local urgency="$1"
+    local title="$2"
+    local body="$3"
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send -a "sus-screenrecord" -u "$urgency" "$title" "$body"
+    fi
+    printf '%s: %s\n' "$title" "$body" >&2
+}
+
+# die - notify an error and exit non-zero.
+die() {
+    notify "critical" "Screen recording" "$1"
+    exit 1
+}
+
+# alive - return success if PID file holds a live process.
+alive() {
+    [[ -f "$PID_FILE" ]] || return 1
+    local pid
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    [[ -n "$pid" ]] || return 1
+    kill -0 "$pid" 2>/dev/null
+}
+
+stop_recording() {
+    if ! alive; then
+        rm -f "$PID_FILE" "$PATH_FILE"
+        notify "normal" "Screen recording" "No active recording to stop."
+        exit 0
+    fi
+    local pid out
+    pid="$(cat "$PID_FILE")"
+    out="$(cat "$PATH_FILE" 2>/dev/null || true)"
+    # gpu-screen-recorder finalizes the file on SIGINT.
+    kill -INT "$pid" 2>/dev/null || true
+    # Wait for the process to exit so the file is fully muxed.
+    local i
+    for ((i = 0; i < 100; i++)); do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 0.1
+    done
+    # If it's still muxing after the grace period, keep state and say so instead
+    # of falsely reporting 'Saved' while orphaning a process with no pidfile ref.
+    if kill -0 "$pid" 2>/dev/null; then
+        notify "normal" "Screen recording" "Still finalizing… run --stop again shortly."
+        exit 0
+    fi
+    rm -f "$PID_FILE" "$PATH_FILE"
+    if [[ -n "$out" ]]; then
+        notify "normal" "Screen recording" "Saved: $out"
+    else
+        notify "normal" "Screen recording" "Recording stopped."
+    fi
+    exit 0
+}
+
+start_recording() {
+    local want_desktop_audio="$1"
+    local want_mic="$2"
+
+    command -v gpu-screen-recorder >/dev/null 2>&1 ||
+        die "gpu-screen-recorder is not installed."
+
+    # Serialize the check-then-spawn critical section so a double keybind press
+    # can't launch two recorders (the race loser would leak, untracked). fd 9 is
+    # closed in the child spawns (9>&-) so the lock releases when THIS script
+    # exits, not when the long-running recorder does.
+    exec 9>"${XDG_RUNTIME_DIR:-/tmp}/sus-screenrecord.lock"
+    flock -n 9 || {
+        notify "normal" "Screen recording" "Another start is already in progress."
+        exit 0
+    }
+
+    if alive; then
+        notify "normal" "Screen recording" "Already recording (pid $(cat "$PID_FILE"))."
+        exit 0
+    fi
+    # Clear stale pid/path files from a crashed run.
+    rm -f "$PID_FILE" "$PATH_FILE"
+
+    local videos="$HOME/Videos"
+    mkdir -p "$videos"
+
+    local out
+    out="$videos/recording-$(date +%Y-%m-%d_%H-%M-%S).mp4"
+
+    # HEVC NVENC preferred; fall back to H.264 if the codec is unsupported.
+    local codec="hevc"
+    if ! gpu-screen-recorder --list-supported-video-codecs 2>/dev/null |
+        grep -qiw "hevc"; then
+        codec="h264"
+    fi
+
+    # Wayland capture: prefer the screencast portal; fall back to whole screen.
+    # ('-w portal' opens the desktop portal picker; '-w screen' grabs the
+    # default output without a picker if the portal path errors.)
+    local window="portal"
+
+    local -a audio_args=()
+    if [[ "$want_desktop_audio" == "yes" ]]; then
+        audio_args+=(-a default_output)
+    fi
+    if [[ "$want_mic" == "yes" ]]; then
+        audio_args+=(-a default_input)
+    fi
+
+    local -a base_args=(-f 60 -k "$codec" "${audio_args[@]}" -o "$out")
+
+    # NOTE: backgrounding a job always returns 0, so a failed exec cannot be
+    # detected from the '&' status — the liveness probe below is what actually
+    # catches a launch failure. '9>&-' closes the inherited flock fd in the
+    # child so the lock is held only by this script.
+    local pid
+    gpu-screen-recorder -w "$window" "${base_args[@]}" >/dev/null 2>&1 9>&- &
+    pid="$!"
+
+    # Give the portal/capture a moment, then confirm the process survived.
+    sleep 1
+    if ! kill -0 "$pid" 2>/dev/null; then
+        # Portal capture failed (no portal, denied picker, etc.); retry on the
+        # whole-screen backend ('screen' = default output, no picker).
+        window="screen"
+        gpu-screen-recorder -w "$window" "${base_args[@]}" >/dev/null 2>&1 9>&- &
+        pid="$!"
+        sleep 1
+        kill -0 "$pid" 2>/dev/null ||
+            die "gpu-screen-recorder exited immediately (capture failed)."
+    fi
+
+    printf '%s\n' "$pid" >"$PID_FILE"
+    printf '%s\n' "$out" >"$PATH_FILE"
+
+    local detail="codec=$codec source=$window"
+    if ((${#audio_args[@]} > 0)); then
+        detail="$detail audio=on"
+    fi
+    notify "normal" "Screen recording started" "$out ($detail)"
+}
+
+main() {
+    local action="start"
+    local want_desktop_audio="no"
+    local want_mic="no"
+
+    while (($# > 0)); do
+        case "$1" in
+        --stop)
+            action="stop"
+            ;;
+        --desktop-audio)
+            want_desktop_audio="yes"
+            ;;
+        --mic)
+            want_mic="yes"
+            ;;
+        -h | --help)
+            cat <<'EOF'
+Usage: sus-screenrecord [--desktop-audio] [--mic] | --stop
+
+  (no args)         Start recording to ~/Videos/recording-<date>.mp4
+  --desktop-audio   Also capture system/desktop audio
+  --mic             Also capture the microphone
+  --stop            Stop the active recording (finalizes the file)
+EOF
+            exit 0
+            ;;
+        *)
+            die "Unknown argument: $1"
+            ;;
+        esac
+        shift
+    done
+
+    if [[ "$action" == "stop" ]]; then
+        stop_recording
+    else
+        start_recording "$want_desktop_audio" "$want_mic"
+    fi
+}
+
+main "$@"

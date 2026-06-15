@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+"""pmail — Proton Mail control via Bridge IMAP (127.0.0.1:1143, STARTTLS).
+
+Thin imaplib wrapper so Claude Code (and scripts) can triage mail:
+list folders, list/search messages, move, flag, mark read/unread, counts.
+
+Creds read from ~/.config/proton-imap/credentials (0600, NOT committed).
+Bridge uses a self-signed localhost cert -> TLS verification disabled (localhost only).
+"""
+import argparse
+import email
+import email.header
+import imaplib
+import json
+import os
+import ssl
+import sys
+
+CRED_FILE = os.path.expanduser("~/.config/proton-imap/credentials")
+
+
+def load_creds():
+    creds = {}
+    try:
+        with open(CRED_FILE) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or "=" not in line or line.startswith("#"):
+                    continue
+                k, v = line.split("=", 1)
+                creds[k] = v
+    except FileNotFoundError:
+        sys.exit(f"creds file missing: {CRED_FILE}")
+    return creds
+
+
+def connect():
+    c = load_creds()
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    M = imaplib.IMAP4(c["PROTON_IMAP_HOST"], int(c["PROTON_IMAP_PORT"]))
+    M.starttls(ctx)
+    M.login(c["PROTON_USER"], c["PROTON_BRIDGE_PASS"])
+    return M
+
+
+def _decode(s):
+    if s is None:
+        return ""
+    parts = email.header.decode_header(s)
+    out = ""
+    for txt, enc in parts:
+        if isinstance(txt, bytes):
+            try:
+                out += txt.decode(enc or "utf-8", errors="replace")
+            except LookupError:
+                # bogus/unknown charset (e.g. "unknown-8bit") -> best effort
+                out += txt.decode("utf-8", errors="replace")
+        else:
+            out += txt
+    return out
+
+
+def list_folders(M, _args):
+    typ, data = M.list()
+    folders = []
+    for raw in data:
+        line = raw.decode(errors="replace")
+        # format: (flags) "delim" "name"
+        name = line.split(' "')[-1].strip().strip('"')
+        folders.append(name)
+    print(json.dumps(folders, indent=2))
+
+
+def counts(M, _args):
+    typ, data = M.list()
+    out = {}
+    for raw in data:
+        line = raw.decode(errors="replace")
+        name = line.split(' "')[-1].strip().strip('"')
+        try:
+            M.select(f'"{name}"', readonly=True)
+            t, d = M.search(None, "UNSEEN")
+            unseen = len(d[0].split()) if d and d[0] else 0
+            t2, d2 = M.search(None, "ALL")
+            total = len(d2[0].split()) if d2 and d2[0] else 0
+            out[name] = {"unread": unseen, "total": total}
+        except Exception:
+            continue
+    print(json.dumps(out, indent=2))
+
+
+def _fetch_headers(M, ids):
+    msgs = []
+    if not ids:
+        return msgs
+    id_str = ",".join(ids)
+    typ, data = M.fetch(id_str, "(FLAGS BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
+    cur = {}
+    for part in data:
+        if isinstance(part, tuple):
+            meta = part[0].decode(errors="replace")
+            uid = meta.split()[0]
+            flags = ""
+            if "FLAGS" in meta:
+                flags = meta.split("FLAGS (")[1].split(")")[0]
+            hdr = email.message_from_bytes(part[1])
+            cur = {
+                "id": uid,
+                "from": _decode(hdr.get("From")),
+                "subject": _decode(hdr.get("Subject")),
+                "date": _decode(hdr.get("Date")),
+                "unread": "\\Seen" not in flags,
+                "flags": flags,
+            }
+            msgs.append(cur)
+    return msgs
+
+
+def list_msgs(M, args):
+    M.select(f'"{args.folder}"', readonly=True)
+    crit = "UNSEEN" if args.unread else "ALL"
+    typ, data = M.search(None, crit)
+    ids = data[0].split() if data and data[0] else []
+    ids = [i.decode() for i in ids]
+    ids = ids[-args.limit:] if args.limit else ids
+    msgs = _fetch_headers(M, ids)
+    print(json.dumps(list(reversed(msgs)), indent=2, ensure_ascii=False))
+
+
+def search(M, args):
+    M.select(f'"{args.folder}"', readonly=True)
+    # IMAP search: TEXT matches body+headers; FROM/SUBJECT targeted
+    if args.field == "from":
+        crit = ["FROM", args.query]
+    elif args.field == "subject":
+        crit = ["SUBJECT", args.query]
+    else:
+        crit = ["TEXT", args.query]
+    typ, data = M.search(None, *crit)
+    ids = data[0].split() if data and data[0] else []
+    ids = [i.decode() for i in ids]
+    ids = ids[-args.limit:] if args.limit else ids
+    print(json.dumps(list(reversed(_fetch_headers(M, ids))), indent=2, ensure_ascii=False))
+
+
+def move(M, args):
+    M.select(f'"{args.folder}"')
+    M.copy(args.ids, f'"{args.dest}"')
+    M.store(args.ids, "+FLAGS", "\\Deleted")
+    M.expunge()
+    print(json.dumps({"moved": args.ids, "from": args.folder, "to": args.dest}))
+
+
+def mark(M, args):
+    M.select(f'"{args.folder}"')
+    flag = "\\Seen"
+    op = "+FLAGS" if args.read else "-FLAGS"
+    M.store(args.ids, op, flag)
+    print(json.dumps({"ids": args.ids, "marked": "read" if args.read else "unread"}))
+
+
+def flag(M, args):
+    M.select(f'"{args.folder}"')
+    op = "+FLAGS" if not args.remove else "-FLAGS"
+    M.store(args.ids, op, "\\Flagged")
+    print(json.dumps({"ids": args.ids, "flagged": not args.remove}))
+
+
+def unread_total(M, _args):
+    """Single integer: total unread across INBOX. For the plasmoid."""
+    M.select('"INBOX"', readonly=True)
+    typ, data = M.search(None, "UNSEEN")
+    n = len(data[0].split()) if data and data[0] else 0
+    print(n)
+
+
+def main():
+    p = argparse.ArgumentParser(prog="pmail", description="Proton Mail via Bridge IMAP")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("folders", help="list all folders/labels")
+    sub.add_parser("counts", help="unread/total per folder (JSON)")
+    sub.add_parser("unread", help="total INBOX unread (int, for widgets)")
+
+    lp = sub.add_parser("list", help="list messages in a folder")
+    lp.add_argument("folder", nargs="?", default="INBOX")
+    lp.add_argument("--unread", action="store_true")
+    lp.add_argument("--limit", type=int, default=25)
+
+    sp = sub.add_parser("search", help="search messages")
+    sp.add_argument("query")
+    sp.add_argument("--folder", default="INBOX")
+    sp.add_argument("--field", choices=["text", "from", "subject"], default="text")
+    sp.add_argument("--limit", type=int, default=25)
+
+    mp = sub.add_parser("move", help="move messages to dest folder")
+    mp.add_argument("ids", help="comma-sep IMAP seq ids, e.g. 12,13")
+    mp.add_argument("dest")
+    mp.add_argument("--folder", default="INBOX")
+
+    rp = sub.add_parser("mark", help="mark read/unread")
+    rp.add_argument("ids")
+    rp.add_argument("--folder", default="INBOX")
+    g = rp.add_mutually_exclusive_group(required=True)
+    g.add_argument("--read", action="store_true")
+    g.add_argument("--unread", dest="read", action="store_false")
+
+    fp = sub.add_parser("flag", help="star/unstar")
+    fp.add_argument("ids")
+    fp.add_argument("--folder", default="INBOX")
+    fp.add_argument("--remove", action="store_true")
+
+    args = p.parse_args()
+    dispatch = {
+        "folders": list_folders, "counts": counts, "unread": unread_total,
+        "list": list_msgs, "search": search, "move": move,
+        "mark": mark, "flag": flag,
+    }
+    M = connect()
+    try:
+        dispatch[args.cmd](M, args)
+    finally:
+        try:
+            M.logout()
+        except Exception:
+            pass
+
+
+if __name__ == "__main__":
+    main()

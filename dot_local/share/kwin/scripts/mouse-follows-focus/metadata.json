@@ -1,0 +1,12 @@
+{
+    "KPlugin": {
+        "Id": "mouse-follows-focus",
+        "Name": "Mouse Follows Focus",
+        "Description": "Warp pointer to the center of a newly focused window (keyboard nav only)",
+        "Version": "1.0",
+        "ServiceTypes": ["KWin/Script"]
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js",
+    "KPackageStructure": "KWin/Script"
+}

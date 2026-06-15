@@ -22,6 +22,17 @@ PACMAN_PKGS=(
     qemu-base
     socat
     virtiofsd
+    rclone
+    proton-mail-bin
+    proton-vpn-gtk-app
+    protonmail-bridge-core
+    grim
+    tesseract
+    tesseract-data-eng
+    gpu-screen-recorder
+    python-evdev
+    python-dbus
+    python-gobject
 )
 
 AUR_PKGS=(
@@ -31,6 +42,7 @@ AUR_PKGS=(
     posy-improved-cursors
     vesktop
     claude-desktop-appimage
+    proton-pass-bin
 )
 
 {{ if eq .chezmoi.hostname "Sushitop" -}}

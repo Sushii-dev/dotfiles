@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Install Web App
+Comment=Create a desktop launcher for a web app (Omarchy)
+Exec=ghostty -e omarchy-webapp-install
+Icon=web-browser
+Terminal=false
+Categories=Utility;
+StartupNotify=true
+Keywords=webapp;web app;install;omarchy;

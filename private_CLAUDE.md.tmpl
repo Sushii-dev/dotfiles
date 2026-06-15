@@ -130,9 +130,33 @@ Then commit and push the chezmoi repo so other machines get the update.
 | gaming-latency | READY | `~/.claude-context/projects/gaming-latency/STATE.md` |
 | greetd-dms |  | `~/.claude-context/projects/greetd-dms/STATE.md` |
 | mhwilds-modding |  | `~/.claude-context/projects/mhwilds-modding/STATE.md` |
+| veiled-aim | IN FLIGHT | `~/.claude-context/projects/veiled-aim/STATE.md` |
 
 Check `~/.claude-context/projects/` for full list and status.
 {{- end }}
+
+## Claude Code Tooling
+
+### Globally installed (per-machine, not chezmoi-tracked)
+
+- **cavekit plugin** (`/ck:spec`, `/ck:build`, `/ck:check`) — spec-driven workflow. Available everywhere via slash commands. Install: `claude plugin marketplace add juliusbrussee/cavekit && claude plugin install ck@cavekit-marketplace`
+- **Time MCP** (user scope) — `claude mcp add --scope user time -- uvx mcp-server-time`
+
+### Per-project MCPs
+
+Big/greenfield projects get a project-scoped `.mcp.json` at repo root with:
+- **Serena** — semantic code search via LSP. Prefer over Grep on large repos.
+- **Context7** — version-pinned library docs on demand.
+
+Template: `~/.claude/templates/large-project/` (`.mcp.json` + `CLAUDE.md` skeleton + `README.md` with usage).
+
+### Projects using cavekit
+
+New greenfield projects only. Skip on:
+- `veiled-aim` — has STATE.md as sole source of truth
+- `taskapp` (halden hub) — has version.ts + patchNotes.ts pipeline
+
+These two get only the MCP portion (Serena + Context7), not cavekit's SPEC.md.
 
 ## User Preferences
 

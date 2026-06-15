@@ -1,0 +1,12 @@
+{
+    "KPlugin": {
+        "Id": "vicinae-focus-lock",
+        "Name": "Vicinae Focus Lock",
+        "Description": "Keep vicinae focused while it is open (counters focus-follows-mouse)",
+        "Version": "1.0",
+        "ServiceTypes": ["KWin/Script"]
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js",
+    "KPackageStructure": "KWin/Script"
+}

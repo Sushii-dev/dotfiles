@@ -83,6 +83,10 @@ BASE_ALLOW = [
 
 BASE_SETTINGS = {
     "effortLevel": "high",
+    "statusLine": {
+        "type": "command",
+        "command": "bash \"/home/sushii/.claude/hooks/statusline.sh\"",
+    },
 }
 
 # Read existing config from stdin (chezmoi passes current file contents)
