@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# wallpaper-engine-import — link Wallpaper Engine "Video"-type Workshop items into
+# the video wallpaper library so the picker / Smart Video Reborn can use them.
+#
+# Only Video-type items are plain media files this engine can play. Scene and Web
+# items are skipped (they need linux-wallpaperengine, a layer-shell daemon that
+# fights plasmashell — better suited to the niri session).
+#
+# Requires Wallpaper Engine (Steam app 431960) installed and items subscribed.
+set -euo pipefail
+
+VID_DIR="$HOME/.local/share/wallpapers-video"
+
+ws=""
+for base in "$HOME/.local/share/Steam" "$HOME/.steam/steam" \
+            /mnt/Tsukiji/SteamLibrary /mnt/Noren/SteamLibrary /mnt/*/SteamLibrary; do
+    d="$base/steamapps/workshop/content/431960"
+    [ -d "$d" ] && { ws="$d"; break; }
+done
+
+if [ -z "$ws" ]; then
+    cat >&2 <<'MSG'
+wallpaper-engine-import: no Wallpaper Engine workshop dir found.
+  1. Install Wallpaper Engine on Steam (app 431960, paid).
+  2. Subscribe to wallpapers in the Workshop (prefer "Video" type).
+  3. Let Steam download them, then re-run this.
+MSG
+    exit 1
+fi
+
+mkdir -p "$VID_DIR"
+n=0
+for item in "$ws"/*/; do
+    pj="$item/project.json"
+    [ -f "$pj" ] || continue
+    type="$(jq -r '.type // empty' "$pj" 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+    [ "$type" = "video" ] || continue
+    file="$(jq -r '.file // empty' "$pj" 2>/dev/null)"
+    [ -n "$file" ] && [ -f "$item/$file" ] || continue
+    title="$(jq -r '.title // "wallpaper-engine"' "$pj" 2>/dev/null | tr -cs '[:alnum:]' '_' | sed 's/_*$//' | cut -c1-60)"
+    ln -sf "$item/$file" "$VID_DIR/${title}.${file##*.}"
+    n=$((n + 1))
+done
+
+echo "wallpaper-engine-import: linked $n Video-type wallpaper(s) into $VID_DIR"
+[ "$n" = 0 ] && echo "(no Video-type items found — Scene/Web items are not supported here)"
+exit 0

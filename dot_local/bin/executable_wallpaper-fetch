@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# wallpaper-fetch <url> [--apply] — download a video wallpaper into the video
+# library (~/.local/share/wallpapers-video) and pre-generate its picker thumbnail.
+#
+# Accepts a direct .mp4/.webm URL or a page yt-dlp can scrape (moewalls,
+# motionbgs, mylivewallpapers, and most video sites via the generic extractor).
+# --apply also sets it as the wallpaper immediately via wallpaper-set.
+set -euo pipefail
+
+VID_DIR="$HOME/.local/share/wallpapers-video"
+THUMB_DIR="$HOME/.cache/wallpaper-picker/thumbs"
+
+apply=0
+url=""
+for arg in "$@"; do
+    case "$arg" in
+        --apply) apply=1 ;;
+        -*) echo "wallpaper-fetch: unknown flag $arg" >&2; exit 2 ;;
+        *) url="$arg" ;;
+    esac
+done
+[ -n "$url" ] || { echo "usage: wallpaper-fetch <url> [--apply]" >&2; exit 2; }
+
+mkdir -p "$VID_DIR" "$THUMB_DIR"
+
+# Prefer an mp4 video stream; fall back to whatever single file is best.
+out="$(yt-dlp \
+    --no-playlist --restrict-filenames --no-part \
+    -f 'bv*[ext=mp4]/b[ext=mp4]/bv*/b' --merge-output-format mp4 \
+    -o "$VID_DIR/%(title).80s.%(ext)s" \
+    --print after_move:filepath \
+    "$url")" || { echo "wallpaper-fetch: download failed" >&2; exit 1; }
+
+[ -n "$out" ] && [ -f "$out" ] || { echo "wallpaper-fetch: no output file" >&2; exit 1; }
+
+# Tidy the filename: drop common boilerplate (site suffix, "live wallpaper", trailing index).
+dir="$(dirname "$out")"; base="$(basename "$out")"; ext="${base##*.}"; stem="${base%.*}"
+clean="$(printf '%s' "$stem" | sed -E 's/_*-_*MoeWalls//Ig; s/_*Live_*Wallpaper//Ig; s/_+[0-9]+$//; s/_+/_/g; s/^_+|_+$//g')"
+if [ -n "$clean" ] && [ "$clean.$ext" != "$base" ] && [ ! -e "$dir/$clean.$ext" ]; then
+    mv -f "$out" "$dir/$clean.$ext"
+    out="$dir/$clean.$ext"
+fi
+echo "wallpaper-fetch: saved $(basename "$out")"
+
+# Pre-generate the picker thumbnail (key = sha1(path)[:16], matches wallpaper-picker).
+key="$(printf '%s' "$out" | sha1sum | cut -c1-16)"
+ffmpeg -y -loglevel error -i "$out" -vframes 1 -vf scale=480:-1 "$THUMB_DIR/$key.jpg" 2>/dev/null || true
+
+[ "$apply" = 1 ] && wallpaper-set "$out"
+exit 0
