@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Wallpaper Picker
+Comment=Quickshell wallpaper picker (KDE)
+Exec=wallpaper-picker
+Icon=preferences-desktop-wallpaper
+Terminal=false
+Categories=Utility;

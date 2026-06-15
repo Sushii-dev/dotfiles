@@ -241,6 +241,7 @@ svc "$TERMINAL_DESKTOP"                       "Meta+T"
 svc "org.kde.dolphin.desktop"                 "Meta+E"
 svc "systemsettings.desktop"                  "Meta+Comma"
 svc "org.kde.plasma-systemmonitor.desktop"    "Meta+M"
+svc "wallpaper-picker.desktop"                "Meta+Shift+W"   # Quickshell wallpaper picker (chezmoi-tracked)
 
 # 5e. Krohnkite tiling keys, by action ID (the "Krohnkite: ..." strings are
 #     display names, NOT config keys — IDs verified against installed release).

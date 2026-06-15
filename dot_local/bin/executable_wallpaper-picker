@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""Toggle the Quickshell wallpaper picker (KDE).
+
+Builds a manifest of the wallpaper libraries (images + videos), generating a
+cached ffmpeg thumbnail for each video, then launches the Quickshell overlay.
+Run again while open to close it. The picker dispatches the actual change to
+`wallpaper-set` (image or video + matugen colours).
+"""
+import glob
+import hashlib
+import json
+import os
+import subprocess
+import sys
+
+HOME = os.path.expanduser("~")
+IMG_DIR = os.path.join(HOME, ".local/share/wallpapers")
+VID_DIR = os.path.join(HOME, ".local/share/wallpapers-video")
+CACHE = os.path.join(HOME, ".cache/wallpaper-picker")
+THUMBS = os.path.join(CACHE, "thumbs")
+SHELL_QML = os.path.join(HOME, ".config/quickshell/wallpaper-picker/shell.qml")
+PROC_MATCH = "quickshell.*wallpaper-picker"
+
+IMG_EXT = ("jpg", "jpeg", "png", "webp", "bmp")
+VID_EXT = ("mp4", "webm", "mkv", "mov", "m4v", "gif")
+
+
+def running():
+    return subprocess.run(["pgrep", "-f", PROC_MATCH],
+                          stdout=subprocess.DEVNULL).returncode == 0
+
+
+def scan(directory, exts):
+    found = []
+    for ext in exts:
+        found += glob.glob(os.path.join(directory, f"*.{ext}"))
+        found += glob.glob(os.path.join(directory, f"*.{ext.upper()}"))
+    return sorted(set(found))
+
+
+def video_thumb(path):
+    key = hashlib.sha1(path.encode()).hexdigest()[:16] + ".jpg"
+    thumb = os.path.join(THUMBS, key)
+    if not os.path.exists(thumb) or os.path.getmtime(thumb) < os.path.getmtime(path):
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-i", path,
+             "-vframes", "1", "-vf", "scale=480:-1", thumb],
+            check=False,
+        )
+    return thumb if os.path.exists(thumb) else path
+
+
+def main():
+    if running():
+        subprocess.run(["pkill", "-f", PROC_MATCH])
+        return
+    os.makedirs(THUMBS, exist_ok=True)
+
+    entries = []
+    for f in scan(IMG_DIR, IMG_EXT):
+        entries.append({"path": f, "thumb": f, "type": "image",
+                        "name": os.path.splitext(os.path.basename(f))[0]})
+    for f in scan(VID_DIR, VID_EXT):
+        entries.append({"path": f, "thumb": video_thumb(f), "type": "video",
+                        "name": os.path.splitext(os.path.basename(f))[0]})
+
+    with open(os.path.join(CACHE, "manifest.json"), "w") as fh:
+        json.dump(entries, fh)
+
+    if not os.path.exists(SHELL_QML):
+        sys.exit(f"wallpaper-picker: missing {SHELL_QML}")
+    os.execvp("qs", ["qs", "-p", SHELL_QML])
+
+
+if __name__ == "__main__":
+    main()

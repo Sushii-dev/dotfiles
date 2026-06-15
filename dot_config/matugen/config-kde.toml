@@ -1,0 +1,10 @@
+# KDE-only matugen config. Invoked by wallpaper-set via --config so it never
+# touches the DMS/niri templates in config.toml (those use DMS-injected dank16.*
+# vars and fail under a plain `matugen image` run). Generates the DankMatugen
+# Plasma colour scheme and applies it live (BreezeDark flip-flop forces reload).
+[config]
+
+[templates.kde]
+input_path = "~/.config/matugen/templates/kde-dank.colors"
+output_path = "~/.local/share/color-schemes/DankMatugen.colors"
+post_hook = "plasma-apply-colorscheme BreezeDark > /dev/null 2>&1; plasma-apply-colorscheme DankMatugen > /dev/null 2>&1"

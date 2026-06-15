@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# wallpaper-set <path> — set the KDE Plasma wallpaper (image OR video) on every
+# desktop and regenerate the matugen colour palette from it.
+#
+# Static images use the native org.kde.image plugin; videos use Smart Video
+# Wallpaper Reborn (luisbocanegra.smart.video.wallpaper.reborn). Both are applied
+# live via Plasma's scripting API — no plasmashell restart. For videos, matugen
+# is fed the first frame (extracted with ffmpeg) so colours still follow the clip.
+#
+# KDE-only. Pairs with the wallpaper-picker Quickshell UI and the [templates.kde]
+# matugen block (DankMatugen colour scheme).
+set -euo pipefail
+
+VIDEO_PLUGIN="luisbocanegra.smart.video.wallpaper.reborn"
+
+path="${1:-}"
+[ -n "$path" ] || { echo "usage: wallpaper-set <image-or-video>" >&2; exit 2; }
+path="$(realpath -e "$path")" || { echo "wallpaper-set: no such file: $1" >&2; exit 1; }
+uri="file://$path"
+ext="${path##*.}"; ext="${ext,,}"
+
+is_video=0
+case "$ext" in
+    mp4|webm|mkv|mov|avi|m4v|gif) is_video=1 ;;
+esac
+
+if [ "$is_video" = 1 ]; then
+    esc_uri=${uri//\\/\\\\}; esc_uri=${esc_uri//\"/\\\"}
+    js="var ds = desktops();
+for (var i = 0; i < ds.length; i++) {
+    var d = ds[i];
+    d.wallpaperPlugin = '$VIDEO_PLUGIN';
+    d.currentConfigGroup = ['Wallpaper', '$VIDEO_PLUGIN', 'General'];
+    d.writeConfig('VideoUrls', JSON.stringify(['$esc_uri']));
+    d.writeConfig('CrossfadeEnabled', true);
+    d.writeConfig('CrossfadeDuration', 800);
+}"
+    # matugen needs a still: extract the first frame
+    palette_src="$(mktemp --suffix=.png)"
+    cleanup() { rm -f "$palette_src"; }
+    trap cleanup EXIT
+    ffmpeg -y -loglevel error -i "$path" -vframes 1 "$palette_src" 2>/dev/null \
+        || { echo "wallpaper-set: frame extract failed; colours not updated" >&2; palette_src=""; }
+else
+    esc_uri=${uri//\\/\\\\}; esc_uri=${esc_uri//\"/\\\"}
+    js="var ds = desktops();
+for (var i = 0; i < ds.length; i++) {
+    var d = ds[i];
+    d.wallpaperPlugin = 'org.kde.image';
+    d.currentConfigGroup = ['Wallpaper', 'org.kde.image', 'General'];
+    d.writeConfig('Image', '$esc_uri');
+}"
+    palette_src="$path"
+fi
+
+qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "$js" >/dev/null
+
+# Regenerate the wallpaper-driven colour palette via the KDE-only matugen config
+# (the shared config.toml has DMS-specific dank16.* templates that fail here).
+# --prefer saturation picks a vibrant accent; post_hook applies the scheme live.
+if [ -n "$palette_src" ]; then
+    matugen image "$palette_src" \
+        --config "$HOME/.config/matugen/config-kde.toml" \
+        --mode dark --prefer saturation >/dev/null 2>&1 \
+        || echo "wallpaper-set: matugen failed" >&2
+fi
+
+echo "wallpaper-set: applied $(basename "$path")"
