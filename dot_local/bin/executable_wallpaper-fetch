@@ -2,13 +2,16 @@
 # wallpaper-fetch <url> [--apply] — download a video wallpaper into the video
 # library (~/.local/share/wallpapers-video) and pre-generate its picker thumbnail.
 #
-# Accepts a direct .mp4/.webm URL or a page yt-dlp can scrape (moewalls,
-# motionbgs, mylivewallpapers, and most video sites via the generic extractor).
-# --apply also sets it as the wallpaper immediately via wallpaper-set.
+# motionbgs.com pages are fetched at full 4K/HD (direct /dl/<tier>/<id> endpoint).
+# Other URLs go through yt-dlp's generic extractor (direct mp4 links, and the
+# inline previews of sites like moewalls — note those previews are low-res; moewalls
+# full-res downloads are obfuscated/ad-gated and not scriptable).
+# --apply also sets it as the wallpaper via wallpaper-set.
 set -euo pipefail
 
 VID_DIR="$HOME/.local/share/wallpapers-video"
 THUMB_DIR="$HOME/.cache/wallpaper-picker/thumbs"
+UA='Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0'
 
 apply=0
 url=""
@@ -20,27 +23,48 @@ for arg in "$@"; do
     esac
 done
 [ -n "$url" ] || { echo "usage: wallpaper-fetch <url> [--apply]" >&2; exit 2; }
-
 mkdir -p "$VID_DIR" "$THUMB_DIR"
 
-# Prefer an mp4 video stream; fall back to whatever single file is best.
-out="$(yt-dlp \
-    --no-playlist --restrict-filenames --no-part \
-    -f 'bv*[ext=mp4]/b[ext=mp4]/bv*/b' --merge-output-format mp4 \
-    -o "$VID_DIR/%(title).80s.%(ext)s" \
-    --print after_move:filepath \
-    "$url")" || { echo "wallpaper-fetch: download failed" >&2; exit 1; }
+slugify() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '_' | sed 's/^_*//;s/_*$//'; }
 
-[ -n "$out" ] && [ -f "$out" ] || { echo "wallpaper-fetch: no output file" >&2; exit 1; }
-
-# Tidy the filename: drop common boilerplate (site suffix, "live wallpaper", trailing index).
-dir="$(dirname "$out")"; base="$(basename "$out")"; ext="${base##*.}"; stem="${base%.*}"
-clean="$(printf '%s' "$stem" | sed -E 's/_*-_*MoeWalls//Ig; s/_*Live_*Wallpaper//Ig; s/_+[0-9]+$//; s/_+/_/g; s/^_+|_+$//g')"
-if [ -n "$clean" ] && [ "$clean.$ext" != "$base" ] && [ ! -e "$dir/$clean.$ext" ]; then
-    mv -f "$out" "$dir/$clean.$ext"
-    out="$dir/$clean.$ext"
-fi
-echo "wallpaper-fetch: saved $(basename "$out")"
+out=""
+case "$url" in
+    *motionbgs.com/*)
+        # motionbgs: pull the highest-res direct file via /dl/<tier>/<id>/
+        page="$(curl -sL -A "$UA" --max-time 30 "$url")"
+        id="$(printf '%s' "$page" | grep -oiE '/media/[0-9]+/' | head -1 | tr -dc '0-9')"
+        [ -n "$id" ] || { echo "wallpaper-fetch: couldn't find motionbgs media id" >&2; exit 1; }
+        slug="$(slugify "$(basename "${url%%\?*}")")"
+        out="$VID_DIR/${slug}.mp4"
+        got=""
+        for tier in 4k hd; do
+            if curl -fL -A "$UA" --max-time 600 "https://motionbgs.com/dl/$tier/$id/" -o "$out" 2>/dev/null \
+               && [ -s "$out" ]; then
+                got="$tier"; break
+            fi
+        done
+        [ -n "$got" ] || { echo "wallpaper-fetch: motionbgs download failed" >&2; rm -f "$out"; exit 1; }
+        echo "wallpaper-fetch: motionbgs $got -> $(basename "$out")"
+        ;;
+    *)
+        out="$(yt-dlp \
+            --no-playlist --restrict-filenames --no-part \
+            -f 'bv*[ext=mp4]/b[ext=mp4]/bv*/b' --merge-output-format mp4 \
+            -o "$VID_DIR/%(title).80s.%(ext)s" \
+            --print after_move:filepath \
+            "$url")" || { echo "wallpaper-fetch: download failed" >&2; exit 1; }
+        [ -n "$out" ] && [ -f "$out" ] || { echo "wallpaper-fetch: no output file" >&2; exit 1; }
+        # Tidy filename: strip site boilerplate. Fix extension to the real container.
+        dir="$(dirname "$out")"; base="$(basename "$out")"; ext="${base##*.}"; stem="${base%.*}"
+        realext="$(ffprobe -v error -show_entries format=format_name -of csv=p=0 "$out" 2>/dev/null | grep -qi 'mp4\|mov' && echo mp4 || echo webm)"
+        clean="$(printf '%s' "$stem" | sed -E 's/_*-_*MoeWalls//Ig; s/_*Live_*Wallpaper//Ig; s/_+[0-9]+$//; s/_+/_/g; s/^_+|_+$//g')"
+        [ -n "$clean" ] || clean="$stem"
+        if [ "$dir/$clean.$realext" != "$out" ] && [ ! -e "$dir/$clean.$realext" ]; then
+            mv -f "$out" "$dir/$clean.$realext"; out="$dir/$clean.$realext"
+        fi
+        echo "wallpaper-fetch: saved $(basename "$out")"
+        ;;
+esac
 
 # Pre-generate the picker thumbnail (key = sha1(path)[:16], matches wallpaper-picker).
 key="$(printf '%s' "$out" | sha1sum | cut -c1-16)"
