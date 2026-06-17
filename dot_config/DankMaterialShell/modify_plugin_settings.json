@@ -9,6 +9,7 @@ import sys
 
 REQUIRED_PLUGINS = {
     "chezmoiStatus": {"enabled": True},
+    "calendarMail": {"enabled": True},
 }
 
 existing = sys.stdin.read().strip()

@@ -12,8 +12,12 @@ foreground = "{{colors.on_surface.default.hex}}"
 secondary_background = "{{colors.surface_container.default.hex}}"
 border = "{{colors.outline_variant.default.hex}}"
 
+# Window focus border: accent (primary) so the launcher window gets a visible
+# wallpaper-coloured outline while open. vicinae is always the focused window
+# when visible, so this reads as a focus border (and uses vicinae's own CSD
+# border, sidestepping the KDE noborder window rule).
 [colors.main_window]
-border = "{{colors.outline_variant.default.hex}}"
+border = "{{colors.primary.default.hex}}"
 footer = { background = "{{colors.surface_container.default.hex}}" }
 
 [colors.settings_window]

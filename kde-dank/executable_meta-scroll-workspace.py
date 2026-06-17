@@ -31,9 +31,11 @@ def invoke(shortcut: str) -> None:
     )
 
 
-def relevant_devices():
+def relevant_devices(skip_paths=()):
     devs = []
     for path in evdev.list_devices():
+        if path in skip_paths:
+            continue
         try:
             d = evdev.InputDevice(path)
             caps = d.capabilities()
@@ -48,6 +50,17 @@ def relevant_devices():
     return devs
 
 
+def rescan(devices: dict) -> int:
+    """Open any newly-appeared matching devices. Wireless mice (e.g. the Logitech
+    PRO X2) re-enumerate with NEW evdev nodes after sleep/reconnect; without this
+    the daemon keeps reading dead nodes and Meta+wheel silently stops working."""
+    have = {d.path for d in devices.values()}
+    new = relevant_devices(skip_paths=have)
+    for d in new:
+        devices[d.fd] = d
+    return len(new)
+
+
 def run() -> None:
     devices = {d.fd: d for d in relevant_devices()}
     if not devices:
@@ -55,9 +68,18 @@ def run() -> None:
     meta_down = set()
     shift_down = set()
     last_fire = 0.0
+    last_rescan = time.monotonic()
 
     while True:
-        r, _, _ = select.select(list(devices), [], [], 5.0)
+        r, _, _ = select.select(list(devices), [], [], 3.0)
+        # Periodically pick up re-enumerated/hotplugged input devices so a wireless
+        # mouse reconnect doesn't silently kill Meta+wheel until the next restart.
+        now = time.monotonic()
+        if now - last_rescan >= 3.0:
+            last_rescan = now
+            added = rescan(devices)
+            if added:
+                print(f"meta-scroll: picked up {added} new input device(s)", flush=True)
         for fd in r:
             dev = devices.get(fd)
             if dev is None:

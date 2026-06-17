@@ -7,7 +7,7 @@ binds {
     // === Application Launchers ===
     Mod+T hotkey-overlay-title="Open Terminal" { spawn "kitty"; }
     Mod+Space hotkey-overlay-title="Application Launcher" {
-        spawn "vicinae" "toggle";
+        spawn "albert" "toggle";
     }
     Mod+Alt+Space hotkey-overlay-title="Sus Menu (Omarchy-style control menu)" {
         spawn "sus" "menu";

@@ -16,3 +16,8 @@ output_path = '~/.config/niri/dms/border-gradient-colors.txt'
 input_path = '~/.config/matugen/templates/vicinae.toml'
 output_path = '~/.local/share/vicinae/themes/dms-matugen.toml'
 post_hook = 'vicinae theme set dms-matugen 2>/dev/null || true'
+
+[templates.albert]
+input_path = '~/.config/matugen/templates/albert.ini'
+output_path = '~/.local/share/albert/widgetsboxmodel/themes/dms-matugen.ini'
+post_hook = 'albert restart 2>/dev/null || true'

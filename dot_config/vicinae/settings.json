@@ -1,0 +1,348 @@
+// This configuration is merged with the default vicinae configuration file, which you can obtain by running the `vicinae config default` command.
+// Every item defined in this file takes precedence over the values defined in the default config or any other imported file.
+//
+// You can make manual edits to this file, however you should keep in mind that this file may be written to by vicinae when a configuration change is made through the GUI.
+// When that happens, any custom comments or formatting will be lost.
+//
+// If you want to maintain a configuration file with your own comments and formatting, you should create a separate file and add it to the 'imports' array.
+//
+// Learn more about configuration at https://docs.vicinae.com/config
+
+{
+   "$schema": "https://vicinae.com/schemas/config.json",
+   "font": {
+      "rendering": "qt",
+      "normal": {
+         "family": "JetBrainsMono Nerd Font",
+         "size": 14
+      }
+   },
+   "theme": {
+      "dark": {
+         "name": "dms-matugen",
+         "icon_theme": "auto"
+      }
+   },
+   "launcher_window": {
+      "opacity": 0.85,
+      "client_side_decorations": {
+         "enabled": true,
+         "rounding": 12,
+         "border_width": 2,
+         "shadow_size": 0
+      },
+      "size": {
+         "width": 660,
+         "height": 800
+      },
+      "blur": {
+         "enabled": true
+      },
+      "compact_mode": {
+         "enabled": false
+      }
+   },
+   "providers": {
+      "applications": {
+         "entrypoints": {
+            "Alacritty": {
+               "enabled": false
+            },
+            "Barony": {
+               "enabled": false
+            },
+            "Black Desert": {
+               "enabled": false
+            },
+            "Borderlands 4": {
+               "enabled": false
+            },
+            "Burger Bots Inc.": {
+               "enabled": false
+            },
+            "Counter-Strike 2": {
+               "enabled": false
+            },
+            "Enshrouded": {
+               "enabled": false
+            },
+            "FINAL FANTASY XIV Online": {
+               "enabled": false
+            },
+            "Hollow Knight Silksong": {
+               "enabled": false
+            },
+            "Monster Hunter Stories 3 Twisted Reflection": {
+               "enabled": false
+            },
+            "Monster Hunter Stories 3 Twisted Reflection Trial Version": {
+               "enabled": false
+            },
+            "Monster Hunter Wilds": {
+               "enabled": false
+            },
+            "Necesse": {
+               "enabled": false
+            },
+            "No Man's Sky": {
+               "enabled": false
+            },
+            "Palworld": {
+               "enabled": false
+            },
+            "Rain World": {
+               "enabled": false
+            },
+            "Subnautica 2": {
+               "enabled": false
+            },
+            "Teardown": {
+               "enabled": false
+            },
+            "Terraria": {
+               "enabled": false
+            },
+            "Wallpaper Engine": {
+               "enabled": false
+            },
+            "YACReader": {
+               "enabled": false
+            },
+            "YACReaderLibrary": {
+               "enabled": false
+            },
+            "YAPYAP": {
+               "enabled": false
+            },
+            "alderon-games-launcher": {
+               "enabled": false
+            },
+            "assistant": {
+               "enabled": false
+            },
+            "avahi-discover": {
+               "enabled": false
+            },
+            "bssh": {
+               "enabled": false
+            },
+            "btrfs-assistant": {
+               "enabled": false
+            },
+            "bvnc": {
+               "enabled": false
+            },
+            "cachyos-hello": {
+               "enabled": true
+            },
+            "cmake-gui": {
+               "enabled": false
+            },
+            "com.github.tchx84.Flatseal": {
+               "enabled": false
+            },
+            "com.hypixel.HytaleLauncher": {
+               "enabled": false
+            },
+            "com.hypixel.HytaleLauncherAndNodeEditor": {
+               "enabled": false
+            },
+            "com.hypixel.HytaleNodeEditorOnly": {
+               "enabled": false
+            },
+            "com.mitchellh.ghostty": {
+               "enabled": false
+            },
+            "com.orama_interactive.Pixelorama": {
+               "enabled": false
+            },
+            "designer": {
+               "enabled": false
+            },
+            "dev.goats.xivlauncher": {
+               "alias": "Final Fantasy XIV"
+            },
+            "electron37": {
+               "enabled": false
+            },
+            "gparted": {
+               "enabled": false
+            },
+            "helix": {
+               "enabled": false
+            },
+            "io.github.libvibrant.vibrantLinux": {
+               "enabled": false
+            },
+            "io.github.limo_app.limo": {
+               "enabled": false
+            },
+            "jconsole-java-openjdk": {
+               "enabled": false
+            },
+            "jshell-java-openjdk": {
+               "enabled": false
+            },
+            "kde-material-you-colors-screenshot-helper": {
+               "enabled": false
+            },
+            "kitty": {
+               "enabled": false
+            },
+            "kitty-shortcut": {
+               "enabled": false
+            },
+            "klassy-settings": {
+               "enabled": false
+            },
+            "limine-snapper-restore": {
+               "enabled": true
+            },
+            "linguist": {
+               "enabled": false
+            },
+            "lsp-plugins": {
+               "enabled": false
+            },
+            "lstopo": {
+               "enabled": false
+            },
+            "mcomix": {
+               "enabled": false
+            },
+            "micro": {
+               "enabled": false
+            },
+            "mpv": {
+               "enabled": false
+            },
+            "net.davidotek.pupgui2": {
+               "enabled": false
+            },
+            "nvidia-settings": {
+               "enabled": false
+            },
+            "nvim": {
+               "enabled": true
+            },
+            "octopi": {
+               "enabled": false
+            },
+            "octopi-cachecleaner": {
+               "enabled": false
+            },
+            "octopi-notifier": {
+               "enabled": false
+            },
+            "octopi-repoeditor": {
+               "enabled": false
+            },
+            "omarchy-webapp-install": {
+               "enabled": false
+            },
+            "omarchy-webapp-remove": {
+               "enabled": false
+            },
+            "org.azahar_emu.Azahar": {
+               "enabled": false
+            },
+            "org.cachyos.scx-manager": {
+               "enabled": false
+            },
+            "org.gnome.Meld": {
+               "enabled": false
+            },
+            "org.kde.ark": {
+               "enabled": true
+            },
+            "org.kde.dolphin": {
+               "enabled": false
+            },
+            "org.kde.kmenuedit": {
+               "enabled": false
+            },
+            "org.kde.okular": {
+               "enabled": false
+            },
+            "org.kde.plasma-systemmonitor": {
+               "enabled": false
+            },
+            "org.kde.spectacle": {
+               "enabled": false
+            },
+            "org.pulseaudio.pavucontrol": {
+               "enabled": false
+            },
+            "org.qbittorrent.qBittorrent": {
+               "enabled": false
+            },
+            "org.rncbc.qtractor": {
+               "enabled": false
+            },
+            "proton.vpn.app.gtk": {
+               "enabled": false
+            },
+            "qalculate-gtk": {
+               "enabled": false
+            },
+            "qdbusviewer": {
+               "enabled": false
+            },
+            "qv4l2": {
+               "enabled": false
+            },
+            "qvidcap": {
+               "enabled": false
+            },
+            "remote-viewer": {
+               "enabled": false
+            },
+            "solaar": {
+               "enabled": false
+            },
+            "sublime_text": {
+               "enabled": false
+            },
+            "sus-comfyui": {
+               "enabled": false
+            },
+            "sus-forge": {
+               "enabled": false
+            },
+            "sus-install": {
+               "enabled": false
+            },
+            "sus-webapp": {
+               "enabled": false
+            },
+            "tmodloader": {
+               "enabled": false
+            },
+            "uuctl": {
+               "enabled": false
+            },
+            "vesktop": {
+               "alias": "Discord"
+            },
+            "vicinae": {
+               "enabled": false
+            },
+            "vim": {
+               "enabled": false
+            },
+            "virt-manager": {
+               "enabled": false
+            },
+            "visualvm": {
+               "enabled": false
+            },
+            "winetricks": {
+               "enabled": false
+            },
+            "yazi": {
+               "enabled": false
+            }
+         }
+      }
+   }
+}

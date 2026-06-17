@@ -26,6 +26,9 @@ PACMAN_PKGS=(
     proton-mail-bin
     proton-vpn-gtk-app
     protonmail-bridge-core
+    python-icalendar
+    python-recurring-ical-events
+    python-dateutil
     grim
     tesseract
     tesseract-data-eng
@@ -34,6 +37,7 @@ PACMAN_PKGS=(
     python-evdev
     python-dbus
     python-gobject
+    cava
 )
 
 AUR_PKGS=(
@@ -45,6 +49,9 @@ AUR_PKGS=(
     claude-desktop-appimage
     proton-pass-bin
     plasma6-wallpapers-smart-video-wallpaper-reborn
+    albert
+    plasma6-applets-kurve
+    python-spotipy
 )
 
 {{ if eq .chezmoi.hostname "Sushitop" -}}

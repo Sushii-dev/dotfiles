@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+# chezmoi modify_ script: merge sushii's riced Albert settings into whatever
+# Albert has written to ~/.config/albert/config. Albert OWNS and rewrites this
+# file (normalises sections, stores per-plugin runtime state), so we cannot
+# track it as a static file — we merge our keys and preserve everything else.
+#
+# chezmoi runs this with the CURRENT target file on stdin; stdout becomes the
+# new file content.
+import sys
+import configparser
+
+# Keys we enforce (the Omarchy-style rice + enabled plugins + matugen theme).
+DESIRED = {
+    "General": {"telemetry": "false"},
+    "applications": {"enabled": "true"},
+    "calculator_qalculate": {"enabled": "true"},
+    "clipboard": {"enabled": "true"},
+    "mediaremote": {"enabled": "true"},
+    "python": {"enabled": "true"},
+    "widgetsboxmodel": {
+        "darkTheme": "dms-matugen",
+        "lightTheme": "dms-matugen",
+        "itemCount": "12",
+        "result_item_icon_size": "48",
+        "result_item_padding": "10",
+        "result_item_vertical_spacing": "6",
+        "result_item_horizontal_spacing": "8",
+        "result_item_text_font_size": "15",
+        "result_item_subtext_font_size": "11",
+        "window_border_width": "2",
+        "window_width": "660",
+        "window_border_radius": "18",
+        "window_padding": "8",
+        "input_font_size": "18",
+        "input_padding": "6",
+        "followCursor": "false",
+    },
+}
+
+cp = configparser.ConfigParser(interpolation=None)
+cp.optionxform = str  # preserve key case (Albert uses camelCase: itemCount, darkTheme)
+cp.read_string(sys.stdin.read())
+
+for section, keys in DESIRED.items():
+    if not cp.has_section(section):
+        cp.add_section(section)
+    for key, value in keys.items():
+        cp.set(section, key, value)
+
+cp.write(sys.stdout, space_around_delimiters=False)

@@ -1,0 +1,16 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Id": "org.sushii.mediacontrol",
+        "Name": "Media & Audio",
+        "Description": "MPRIS media control for any player plus PipeWire audio source/volume control. Panel element is a matugen-themed cava audio visualizer.",
+        "Icon": "multimedia-volume-control",
+        "Authors": [
+            { "Name": "sushii" }
+        ],
+        "Category": "Multimedia",
+        "License": "MIT",
+        "Version": "1.0.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

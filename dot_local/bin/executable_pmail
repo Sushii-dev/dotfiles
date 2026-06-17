@@ -96,25 +96,35 @@ def _fetch_headers(M, ids):
     if not ids:
         return msgs
     id_str = ",".join(ids)
-    typ, data = M.fetch(id_str, "(FLAGS BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
-    cur = {}
+    # UID + Proton internal id enable stable addressing + web deep-links.
+    # NOTE: "id" stays the IMAP sequence number (back-compat); use "uid" for mutations.
+    typ, data = M.fetch(
+        id_str,
+        "(UID FLAGS BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE X-PM-INTERNAL-ID)])",
+    )
     for part in data:
         if isinstance(part, tuple):
             meta = part[0].decode(errors="replace")
-            uid = meta.split()[0]
+            seq = meta.split()[0]
+            uid = ""
+            if "UID " in meta:
+                uid = meta.split("UID ", 1)[1].split()[0].rstrip(")")
             flags = ""
-            if "FLAGS" in meta:
-                flags = meta.split("FLAGS (")[1].split(")")[0]
+            if "FLAGS (" in meta:
+                flags = meta.split("FLAGS (", 1)[1].split(")")[0]
             hdr = email.message_from_bytes(part[1])
-            cur = {
-                "id": uid,
+            iid = (hdr.get("X-Pm-Internal-Id") or "").strip()
+            msgs.append({
+                "id": seq,
+                "uid": uid,
+                "internal_id": iid,
+                "web_url": ("https://mail.proton.me/u/0/all-mail/" + iid) if iid else "",
                 "from": _decode(hdr.get("From")),
                 "subject": _decode(hdr.get("Subject")),
                 "date": _decode(hdr.get("Date")),
                 "unread": "\\Seen" not in flags,
                 "flags": flags,
-            }
-            msgs.append(cur)
+            })
     return msgs
 
 
@@ -176,6 +186,78 @@ def unread_total(M, _args):
     print(n)
 
 
+def _part_text(part):
+    payload = part.get_payload(decode=True)
+    if payload is None:
+        return ""
+    cs = part.get_content_charset() or "utf-8"
+    try:
+        return payload.decode(cs, errors="replace")
+    except LookupError:
+        return payload.decode("utf-8", errors="replace")
+
+
+def _html_to_text(h):
+    import re
+    import html as _html
+    h = re.sub(r"(?is)<(script|style).*?</\1>", "", h)
+    h = re.sub(r"(?i)<br\s*/?>", "\n", h)
+    h = re.sub(r"(?i)</(p|div|tr|li|h[1-6])>", "\n", h)
+    h = re.sub(r"(?s)<[^>]+>", "", h)
+    h = _html.unescape(h)
+    h = re.sub(r"[ \t]+", " ", h)
+    h = re.sub(r"\n[ \t]+", "\n", h)
+    h = re.sub(r"\n{3,}", "\n\n", h)
+    return h.strip()
+
+
+def _extract_body(msg):
+    plain = html = None
+    if msg.is_multipart():
+        for part in msg.walk():
+            if part.is_multipart():
+                continue
+            if "attachment" in str(part.get("Content-Disposition") or "").lower():
+                continue
+            ct = part.get_content_type()
+            if ct == "text/plain" and plain is None:
+                plain = _part_text(part)
+            elif ct == "text/html" and html is None:
+                html = _part_text(part)
+    elif msg.get_content_type() == "text/html":
+        html = _part_text(msg)
+    else:
+        plain = _part_text(msg)
+    if plain and plain.strip():
+        return plain.strip()
+    if html:
+        return _html_to_text(html)
+    return "(no readable text)"
+
+
+def read_msg(M, args):
+    M.select(f'"{args.folder}"')          # read-write so --mark can set \Seen
+    typ, data = M.uid("fetch", args.uid, "(BODY.PEEK[])")
+    raw = None
+    for part in data:
+        if isinstance(part, tuple):
+            raw = part[1]
+    if not raw:
+        print(json.dumps({"error": "not found"}))
+        return
+    msg = email.message_from_bytes(raw)
+    out = {
+        "from": _decode(msg.get("From")),
+        "subject": _decode(msg.get("Subject")),
+        "date": _decode(msg.get("Date")),
+        "to": _decode(msg.get("To")),
+        "body": _extract_body(msg),
+    }
+    if args.mark:
+        M.uid("store", args.uid, "+FLAGS", "\\Seen")
+    print(json.dumps(out, ensure_ascii=False))
+
+
 def main():
     p = argparse.ArgumentParser(prog="pmail", description="Proton Mail via Bridge IMAP")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -212,11 +294,16 @@ def main():
     fp.add_argument("--folder", default="INBOX")
     fp.add_argument("--remove", action="store_true")
 
+    rdp = sub.add_parser("read", help="fetch a message body by UID (JSON)")
+    rdp.add_argument("uid")
+    rdp.add_argument("--folder", default="INBOX")
+    rdp.add_argument("--mark", action="store_true", help="also mark \\Seen")
+
     args = p.parse_args()
     dispatch = {
         "folders": list_folders, "counts": counts, "unread": unread_total,
         "list": list_msgs, "search": search, "move": move,
-        "mark": mark, "flag": flag,
+        "mark": mark, "flag": flag, "read": read_msg,
     }
     M = connect()
     try:

@@ -1,0 +1,14 @@
+{
+    "id": "calendarMail",
+    "name": "Proton Calendar & Mail",
+    "description": "Proton Calendar events (day/week/month) plus unread mail count and a clickable inbox shortlist",
+    "version": "1.0.0",
+    "author": "sushii",
+    "type": "widget",
+    "capabilities": ["dankbar-widget"],
+    "component": "./CalendarMail.qml",
+    "icon": "calendar_month",
+    "settings": "./Settings.qml",
+    "requires": ["pmail", "pcal"],
+    "permissions": ["settings_read", "settings_write", "process", "network"]
+}

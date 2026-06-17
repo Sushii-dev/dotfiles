@@ -36,11 +36,15 @@ while IFS=$'\t' read -r name desc; do
   file="${APPS_DIR}/${PREFIX}${name}.desktop"
   KEEP["${PREFIX}${name}.desktop"]=1
 
+  # Use an ABSOLUTE path to sus: KDE/kglobalaccel and other .desktop launchers
+  # run with a minimal PATH that does NOT include ~/.local/bin, so a bare "sus"
+  # fails with "Could not find the program 'sus'". $HOME keeps this per-machine.
+  sus_bin="${HOME}/.local/bin/sus"
   if _needs_terminal "$name"; then
-    exec_line="ghostty -e sus ${name}"
+    exec_line="ghostty -e ${sus_bin} ${name}"
     term="false" # ghostty IS the terminal; Terminal=false so the launcher doesn't double-wrap
   else
-    exec_line="sus ${name}"
+    exec_line="${sus_bin} ${name}"
     term="false"
   fi
 
@@ -55,7 +59,7 @@ Exec=${exec_line}
 Terminal=${term}
 Categories=Utility;
 Keywords=sus;menu;${name};
-StartupNotify=true
+StartupNotify=false
 NoDisplay=false
 EOF
   chmod +x "$file"

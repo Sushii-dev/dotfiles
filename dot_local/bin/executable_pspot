@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""pspot — Spotify Web API helper for the org.sushii.spotify plasmoid.
+
+Covers only what MPRIS/playerctl CANNOT do: library + playlist edits and the
+saved/like status of a track. Transport (play/pause/next/prev/seek) is handled
+by the widget via MPRIS, so this stays light and dodges the playback rate limit.
+
+Auth: OAuth Authorization Code + PKCE (no client secret). Loopback redirect.
+Config: ~/.config/spotify-controller/config  (CLIENT_ID, REDIRECT_URI; 0600, NOT committed)
+Token cache: ~/.config/spotify-controller/.cache  (NOT committed)
+
+Commands:
+  auth                      run the one-time browser authorization
+  me                        {display_name, product}  (product=premium/free)
+  saved   <trackid>         {saved: bool}
+  save    <trackid>         like (add to Liked Songs)
+  unsave  <trackid>         unlike
+  playlists                 [{id,name,owner,editable}]  (own/collaborative only)
+  contains <plid> <trackid> {contains: bool}
+  add     <plid> <trackid>  add track to playlist
+  remove  <plid> <trackid>  remove track from playlist
+
+trackid accepts "spotify:track:XX1", "XX1", or a track URL.
+"""
+import json
+import os
+import re
+import sys
+
+CONF_DIR = os.path.expanduser("~/.config/spotify-controller")
+CONF_FILE = os.path.join(CONF_DIR, "config")
+CACHE_FILE = os.path.join(CONF_DIR, ".cache")
+
+SCOPES = ("user-library-read user-library-modify "
+          "playlist-read-private playlist-read-collaborative "
+          "playlist-modify-public playlist-modify-private")
+
+
+def load_conf():
+    conf = {"REDIRECT_URI": "http://127.0.0.1:8888/callback"}
+    try:
+        with open(CONF_FILE) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                conf[k.strip()] = v.strip()
+    except FileNotFoundError:
+        sys.exit(json.dumps({"error": "no config; run app registration first",
+                             "config": CONF_FILE}))
+    if not conf.get("CLIENT_ID"):
+        sys.exit(json.dumps({"error": "CLIENT_ID missing in " + CONF_FILE}))
+    return conf
+
+
+def client(interactive=False):
+    import spotipy
+    from spotipy.oauth2 import SpotifyPKCE
+    from spotipy.cache_handler import CacheFileHandler
+    conf = load_conf()
+    auth = SpotifyPKCE(
+        client_id=conf["CLIENT_ID"],
+        redirect_uri=conf["REDIRECT_URI"],
+        scope=SCOPES,
+        open_browser=interactive,
+        cache_handler=CacheFileHandler(cache_path=CACHE_FILE),
+    )
+    if not interactive:
+        # never block the widget on a browser prompt
+        tok = auth.get_cached_token()
+        if not tok:
+            sys.exit(json.dumps({"error": "not authorized; run: pspot auth"}))
+    return spotipy.Spotify(auth_manager=auth)
+
+
+def norm_id(s):
+    if not s:
+        return ""
+    m = re.search(r"(?:spotify:track:|/track/)?([A-Za-z0-9]{22})", s)
+    return m.group(1) if m else s
+
+
+def main():
+    if len(sys.argv) < 2:
+        sys.exit(json.dumps({"error": "no command"}))
+    cmd = sys.argv[1]
+    args = sys.argv[2:]
+
+    if cmd == "auth":
+        sp = client(interactive=True)
+        me = sp.me()
+        print(json.dumps({"ok": True, "user": me.get("display_name"),
+                          "product": me.get("product")}))
+        return
+
+    sp = client(interactive=False)
+
+    if cmd == "me":
+        me = sp.me()
+        print(json.dumps({"display_name": me.get("display_name"),
+                          "product": me.get("product"), "id": me.get("id")}))
+    elif cmd == "saved":
+        tid = norm_id(args[0])
+        print(json.dumps({"saved": bool(sp.current_user_saved_tracks_contains([tid])[0])}))
+    elif cmd == "save":
+        sp.current_user_saved_tracks_add([norm_id(args[0])])
+        print(json.dumps({"saved": True}))
+    elif cmd == "unsave":
+        sp.current_user_saved_tracks_delete([norm_id(args[0])])
+        print(json.dumps({"saved": False}))
+    elif cmd == "playlists":
+        me_id = sp.me()["id"]
+        out = []
+        res = sp.current_user_playlists(limit=50)
+        while res:
+            for pl in res["items"]:
+                if not pl:
+                    continue
+                owner = (pl.get("owner") or {}).get("id")
+                editable = owner == me_id or pl.get("collaborative")
+                if editable:
+                    out.append({"id": pl["id"], "name": pl["name"],
+                                "owner": owner, "editable": True})
+            res = sp.next(res) if res.get("next") else None
+        print(json.dumps(out, ensure_ascii=False))
+    elif cmd == "contains":
+        plid, tid = args[0], norm_id(args[1])
+        found = False
+        res = sp.playlist_items(plid, fields="items.track.id,next", limit=100)
+        while res and not found:
+            for it in res["items"]:
+                tr = it.get("track") or {}
+                if tr.get("id") == tid:
+                    found = True
+                    break
+            res = sp.next(res) if res.get("next") else None
+        print(json.dumps({"contains": found}))
+    elif cmd == "add":
+        plid, tid = args[0], norm_id(args[1])
+        sp.playlist_add_items(plid, ["spotify:track:" + tid])
+        print(json.dumps({"added": True}))
+    elif cmd == "remove":
+        plid, tid = args[0], norm_id(args[1])
+        sp.playlist_remove_all_occurrences_of_items(plid, ["spotify:track:" + tid])
+        print(json.dumps({"removed": True}))
+    else:
+        sys.exit(json.dumps({"error": "unknown command: " + cmd}))
+
+
+if __name__ == "__main__":
+    main()

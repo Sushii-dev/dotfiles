@@ -21,6 +21,9 @@ rclone
 proton-mail-bin
 proton-vpn-gtk-app
 protonmail-bridge-core
+python-icalendar
+python-recurring-ical-events
+python-dateutil
 
 # sus menu (Omarchy port) tooling: screenshot/OCR + screen recording
 grim
@@ -43,3 +46,7 @@ python-dbus (KDE niri-parity daemons: mff)
 python-gobject (KDE niri-parity daemons: mff GLib loop)
 plasma6-wallpapers-smart-video-wallpaper-reborn (AUR — native KDE video wallpaper engine)
 yt-dlp (wallpaper-fetch: download video wallpapers)
+albert (Raycast-style launcher — primary, replaces vicinae; vicinae kept for sus-menu dmenu)
+cava (audio visualizer backend for org.sushii.mediacontrol plasmoid via cava-vis)
+plasma6-applets-kurve (luisbocanegra cava audio visualizer — navbar element)
+python-spotipy (Spotify Web API for org.sushii.spotify / pspot)

@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Id": "org.sushii.spotify",
+        "Name": "Spotify",
+        "Description": "Spotify controller — playback via MPRIS plus like/unlike and playlist add/remove via the Web API (pspot).",
+        "Icon": "spotify",
+        "Authors": [ { "Name": "sushii" } ],
+        "Category": "Multimedia",
+        "License": "MIT",
+        "Version": "1.0.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

@@ -2,8 +2,8 @@
     "KPackageStructure": "Plasma/Applet",
     "KPlugin": {
         "Id": "org.sushii.protonmail",
-        "Name": "Proton Mail",
-        "Description": "Live Proton Mail unread count via Bridge IMAP; click to open Proton Mail.",
+        "Name": "Proton Calendar & Mail",
+        "Description": "Proton Calendar events (day/week/month) + unread mail count and a clickable inbox shortlist via Bridge IMAP.",
         "Icon": "proton-mail",
         "Authors": [
             { "Name": "sushii" }

@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+"""cava-vis — feed a cava audio-spectrum frame to a tmpfs statefile for QML.
+
+Spawns cava with a generated raw-ascii config, reads each frame, and atomically
+overwrites a tiny statefile with the latest frame (semicolon-delimited bar
+values 0-100). A QML plasmoid polls that statefile on a timer and draws bars.
+
+Self-contained: when this process is killed (e.g. Plasma disconnects the
+DataSource), the SIGTERM handler terminates the child cava — no orphans, no
+systemd unit needed.
+
+Usage: cava-vis <statefile> [bars] [framerate] [source]
+
+`source` is a PipeWire/Pulse monitor name to capture PASSIVELY (e.g.
+"wavexlr-sink.monitor"). When given, the pipewire backend reads that monitor
+node directly — it never calls set-default-source, so it cannot disturb a
+full-duplex device (Wave XLR shares one USB PCM; swapping its capture side
+tears down playback). When omitted, cava autodetects the default sink monitor.
+"""
+import os
+import signal
+import subprocess
+import sys
+
+statefile = sys.argv[1]
+bars = sys.argv[2] if len(sys.argv) > 2 else "24"
+framerate = sys.argv[3] if len(sys.argv) > 3 else "60"
+source = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else ""
+tmp = statefile + ".tmp"
+
+input_section = ""
+if source:
+    # passive pipewire monitor capture — does NOT touch the default source
+    input_section = f"[input]\nmethod = pipewire\nsource = {source}\n"
+
+conf = f"""[general]
+framerate = {framerate}
+bars = {bars}
+{input_section}[output]
+method = raw
+raw_target = /dev/stdout
+data_format = ascii
+ascii_max_range = 100
+bar_delimiter = 59
+frame_delimiter = 10
+"""
+confpath = statefile + ".conf"
+with open(confpath, "w") as fh:
+    fh.write(conf)
+
+proc = subprocess.Popen(["cava", "-p", confpath], stdout=subprocess.PIPE)
+
+
+def _bye(*_a):
+    try:
+        proc.terminate()
+    except Exception:
+        pass
+    try:
+        os.remove(statefile)
+    except Exception:
+        pass
+    sys.exit(0)
+
+
+signal.signal(signal.SIGTERM, _bye)
+signal.signal(signal.SIGINT, _bye)
+
+try:
+    for raw in proc.stdout:
+        line = raw.decode(errors="ignore").strip()
+        if not line:
+            continue
+        with open(tmp, "w") as fh:
+            fh.write(line)
+        os.replace(tmp, statefile)  # atomic swap
+finally:
+    _bye()

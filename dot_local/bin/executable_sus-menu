@@ -75,7 +75,10 @@ pick() {
   local title="${1:-sus}"
   local placeholder="${2:-Select}"
   if [[ "$PICKER" == vicinae* ]]; then
-    $PICKER -n "$title" -p "$placeholder"
+    # --no-section drops the "Entries (N)" heading for a cleaner, Omarchy-style
+    # flat list. dmenu is text-only (no per-item icons — that needs a full
+    # vicinae extension), so this is the closest dmenu gets to the Omarchy look.
+    $PICKER -n "$title" -p "$placeholder" --no-section
   else
     # fuzzel --dmenu and other dmenu-likes: prompt via -p only.
     $PICKER -p "$title: "
