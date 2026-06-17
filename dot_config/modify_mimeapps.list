@@ -14,7 +14,14 @@ DEFAULTS = {
     "x-scheme-handler/https": "brave-browser.desktop",
     "x-scheme-handler/about": "brave-browser.desktop",
     "x-scheme-handler/unknown": "brave-browser.desktop",
+    "x-scheme-handler/chrome": "brave-browser.desktop",
     "text/html": "brave-browser.desktop",
+    "application/xhtml+xml": "brave-browser.desktop",
+    "application/x-extension-htm": "brave-browser.desktop",
+    "application/x-extension-html": "brave-browser.desktop",
+    "application/x-extension-shtml": "brave-browser.desktop",
+    "application/x-extension-xht": "brave-browser.desktop",
+    "application/x-extension-xhtml": "brave-browser.desktop",
     # Images — Loupe
     "image/jpeg": "org.gnome.Loupe.desktop",
     "image/png": "org.gnome.Loupe.desktop",
@@ -87,10 +94,31 @@ DEFAULTS = {
     "audio/x-vorbis+ogg": "mpv.desktop",
 }
 
+# Desktop files for browsers we've uninstalled — strip any handler that points
+# at them so stale [Added Associations] / [Default Applications] entries don't
+# leave dangling defaults pointing at missing .desktop files.
+REMOVED_HANDLERS = {"firefox.desktop", "helium.desktop", "qutebrowser.desktop"}
+
+
+def _strip_removed(value):
+    # mimeapps values are ';'-separated handler lists, optionally trailing ';'
+    handlers = [h for h in value.split(";") if h and h not in REMOVED_HANDLERS]
+    return ";".join(handlers) + ";" if handlers else ""
+
+
 existing = sys.stdin.read()
 # Strip comments — mimeapps.list is Desktop Entry format which doesn't support # comments.
 # KDE's parser silently breaks on them.
-lines = [l for l in existing.splitlines() if not l.lstrip().startswith("#")]
+_raw = [l for l in existing.splitlines() if not l.lstrip().startswith("#")]
+lines = []
+for l in _raw:
+    if "=" in l and not l.lstrip().startswith("["):
+        key, _, val = l.partition("=")
+        cleaned = _strip_removed(val)
+        if not cleaned:
+            continue  # drop key entirely if no handlers remain
+        l = f"{key}={cleaned}"
+    lines.append(l)
 output = list(lines)
 
 # Find [Default Applications] section
