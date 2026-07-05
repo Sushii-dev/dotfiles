@@ -57,6 +57,8 @@ AUR_PKGS=(
 {{ if eq .chezmoi.hostname "Sushitop" -}}
 # KDE Plasma gaming session extras (kde-dank: tiling + DMS look in Plasma)
 PACMAN_PKGS+=(plasma-systemmonitor)
+# Quetzal co-op: mGBA dual-window host + Sunshine (cachyos repo) Moonlight stream host
+PACMAN_PKGS+=(mgba-qt sunshine)
 AUR_PKGS+=(kwin-effects-better-blur-dx)
 {{ end -}}
 
@@ -106,5 +108,8 @@ fi
 # Enable DMS systemd user services (color watchers for starship/border gradient)
 systemctl --user enable --now dms-starship.path 2>/dev/null || true
 systemctl --user enable --now dms-border-gradient.path 2>/dev/null || true
+
+# Albert launcher daemon (primary launcher; needed for the `albert toggle` keybind)
+systemctl --user enable --now albert.service 2>/dev/null || true
 
 echo "Package setup complete."
