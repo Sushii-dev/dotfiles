@@ -50,5 +50,5 @@ albert (Raycast-style launcher — primary, replaces vicinae; vicinae kept for s
 cava (audio visualizer backend for org.sushii.mediacontrol plasmoid via cava-vis)
 plasma6-applets-kurve (luisbocanegra cava audio visualizer — navbar element)
 python-spotipy (Spotify Web API for org.sushii.spotify / pspot)
-mgba-qt (Sushitop only — Pokemon Quetzal local link co-op, two windows)
+mgba flatpak io.mgba.mGBA (Sushitop only — Quetzal co-op; native mgba-qt freezes with sdl2-compat)
 sunshine (cachyos repo, Sushitop only — Moonlight stream host for P2 co-op window)

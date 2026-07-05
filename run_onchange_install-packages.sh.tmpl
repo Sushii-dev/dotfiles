@@ -57,8 +57,8 @@ AUR_PKGS=(
 {{ if eq .chezmoi.hostname "Sushitop" -}}
 # KDE Plasma gaming session extras (kde-dank: tiling + DMS look in Plasma)
 PACMAN_PKGS+=(plasma-systemmonitor)
-# Quetzal co-op: mGBA dual-window host + Sunshine (cachyos repo) Moonlight stream host
-PACMAN_PKGS+=(mgba-qt sunshine)
+# Quetzal co-op: Sunshine (cachyos repo) Moonlight stream host; mGBA via flatpak io.mgba.mGBA
+PACMAN_PKGS+=(sunshine)
 AUR_PKGS+=(kwin-effects-better-blur-dx)
 {{ end -}}
 
