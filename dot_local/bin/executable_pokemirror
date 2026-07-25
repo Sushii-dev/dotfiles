@@ -26,7 +26,9 @@
 #   OUTPUT=DP-1              # KDE only: pin the window to this connector
 #                            #   (under niri the window rule in config.kdl does this)
 #   AUDIO=1                  # forward phone audio to the desktop's default sink
-#   AUDIO_BUFFER=            # ms; empty = scrcpy default (50). Raise if it crackles.
+#   AUDIO_BUFFER=            # ms; empty = 150 over Wi-Fi, 50 over USB.
+#   AUDIO_OUTPUT_BUFFER=     # ms; empty = 15 over Wi-Fi, 5 over USB.
+#                            #   Raise both if audio crackles or warbles.
 #   PANEL=1080x1920          # virtual display size; default = phone's native panel
 #   DPI=420                  # lower = smaller UI = more content on screen
 #   FULLSCREEN=1             # 1 -> scrcpy opens fullscreen (pairs with PANEL=output size)
@@ -45,7 +47,7 @@
 
 set -uo pipefail
 
-CONF_KEYS='CONNECTION|CODEC|PANEL|DPI|FULLSCREEN|VD_DECORATIONS|EXTRA_ARGS|PHONE_IP|PHONE_PORT|PKG_POGO|PKG_TCGP|OUTPUT|AUDIO|AUDIO_BUFFER'
+CONF_KEYS='CONNECTION|CODEC|PANEL|DPI|FULLSCREEN|VD_DECORATIONS|EXTRA_ARGS|PHONE_IP|PHONE_PORT|PKG_POGO|PKG_TCGP|OUTPUT|AUDIO|AUDIO_BUFFER|AUDIO_OUTPUT_BUFFER'
 
 # Snapshot deliberate one-off overrides (CONNECTION=usb pokemirror pogo) BEFORE
 # the defaults below are assigned. Assigning to an already-exported name would
@@ -68,7 +70,8 @@ CONNECTION=auto     # auto | usb | tcp
 CODEC=h265
 OUTPUT=""           # KDE only: connector name to pin the window to, e.g. DP-1
 AUDIO=1             # 1 -> forward phone audio to the desktop (phone goes silent)
-AUDIO_BUFFER=""     # ms; empty = scrcpy default (50)
+AUDIO_BUFFER=""        # ms; empty = 150 over Wi-Fi, 50 over USB
+AUDIO_OUTPUT_BUFFER="" # ms; empty = 15 over Wi-Fi, scrcpy default (5) over USB
 
 # Resolved by pick_transport().
 TRANSPORT=""
@@ -391,11 +394,21 @@ launch() {
         # bursts, so it needs a much deeper buffer than USB — scrcpy's 50ms
         # default is a USB number. The cost is audio latency, which matters far
         # less than dropouts because the video has its own separate buffer.
-        local abuf=$AUDIO_BUFFER
+        #
+        # Warble is the same problem wearing a different hat. scrcpy keeps the
+        # phone's audio clock aligned with the desktop's by inserting and
+        # dropping samples; jitter makes that correction hunt, and hunting
+        # sounds like a warped record. A deeper buffer gives it slack so it
+        # corrects gently instead of constantly.
+        local abuf=$AUDIO_BUFFER obuf=$AUDIO_OUTPUT_BUFFER
         if [ -z "$abuf" ]; then
             [ "$TRANSPORT" = usb ] && abuf=50 || abuf=150
         fi
+        if [ -z "$obuf" ] && [ "$TRANSPORT" != usb ]; then
+            obuf=15
+        fi
         base+=(--audio-codec=opus --audio-buffer="$abuf")
+        [ -n "$obuf" ] && base+=(--audio-output-buffer="$obuf")
     else
         base+=(--no-audio)
     fi
