@@ -1,0 +1,341 @@
+#!/usr/bin/env bash
+# pokemirror — mirror a real Android phone to the desktop with scrcpy, for
+# playing portrait-locked Pokémon titles (Pokémon GO, Pokémon TCG Pocket).
+#
+# The games run on the phone: real GPS, real Play Integrity attestation.
+# The desktop is display + input only. No automation, no macros, no scripted
+# taps — those are bannable in both titles and this script will never add them.
+#
+# Usage:
+#   pokemirror setup          one-time USB pairing: enables adb over TCP, saves IP
+#   pokemirror pogo           launch Pokémon GO   (latency profile)
+#   pokemirror tcgp           launch TCG Pocket   (smoothness profile)
+#   pokemirror connect        connect adb over TCP only
+#   pokemirror status         show connection, resolved packages, panel size
+#   pokemirror apps           list Pokémon-ish packages on the phone
+#   pokemirror config         print the config file path and contents
+#
+# Config: ~/.config/pokemirror/config  (host-specific, NOT tracked by chezmoi)
+#   PHONE_IP=192.168.1.50
+#   PHONE_PORT=5555
+#   PKG_POGO=com.nianticlabs.pokemongo
+#   PKG_TCGP=jp.pokemon.pokemontcgp
+#   PANEL=1080x2400          # override the phone's native panel size
+#   DPI=420
+#   VD_DECORATIONS=0         # 1 -> drop --no-vd-system-decorations
+#   EXTRA_ARGS=              # appended verbatim to every scrcpy invocation
+
+set -uo pipefail
+
+CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/pokemirror"
+CONF="$CONF_DIR/config"
+
+PHONE_PORT=5555
+DPI=420
+VD_DECORATIONS=0
+PANEL=""
+PHONE_IP=""
+PKG_POGO=""
+PKG_TCGP=""
+EXTRA_ARGS=""
+
+# Package name patterns. Names are resolved on the device at runtime; these are
+# only search patterns, never assumed to be the real package id.
+PAT_POGO='nianticlabs\.pokemongo|com\.pokemongo|pokemongo'
+PAT_TCGP='pokemontcgp|pokemon.*tcg|tcg.*pocket'
+
+# scrcpy exit codes: 0 success, 1 failure, 2 device disconnected.
+EXIT_DISCONNECTED=2
+
+RECONNECT_TRIES=5
+
+c_red=$'\033[31m'; c_yel=$'\033[33m'; c_grn=$'\033[32m'; c_dim=$'\033[2m'; c_off=$'\033[0m'
+info()  { printf '%s==>%s %s\n' "$c_grn" "$c_off" "$*"; }
+warn()  { printf '%s==>%s %s\n' "$c_yel" "$c_off" "$*" >&2; }
+die()   { printf '%s==>%s %s\n' "$c_red" "$c_off" "$*" >&2; exit 1; }
+dim()   { printf '%s%s%s\n' "$c_dim" "$*" "$c_off"; }
+
+need() { command -v "$1" >/dev/null 2>&1 || die "$1 not installed (pacman -S ${2:-$1})"; }
+
+load_conf() {
+    [ -f "$CONF" ] || return 0
+    # shellcheck disable=SC1090
+    source "$CONF"
+}
+
+save_conf_key() {
+    local key=$1 val=$2
+    mkdir -p "$CONF_DIR"
+    touch "$CONF"
+    if grep -q "^${key}=" "$CONF" 2>/dev/null; then
+        sed -i "s|^${key}=.*|${key}=${val}|" "$CONF"
+    else
+        printf '%s=%s\n' "$key" "$val" >> "$CONF"
+    fi
+}
+
+serial() { printf '%s:%s' "$PHONE_IP" "$PHONE_PORT"; }
+
+# --- connection ------------------------------------------------------------
+
+# Prints the device state for the TCP serial: device | offline | unauthorized | absent
+dev_state() {
+    local s
+    s=$(adb devices | awk -v d="$(serial)" '$1==d {print $2}')
+    printf '%s' "${s:-absent}"
+}
+
+usb_serial() {
+    adb devices | awk '$2=="device" && $1 !~ /:/ {print $1; exit}'
+}
+
+reboot_hint() {
+    cat >&2 <<EOF
+
+${c_yel}Phone is not listening on TCP port ${PHONE_PORT}.${c_off}
+adb's TCP mode does not survive a phone reboot. Plug the phone in over USB and:
+
+    pokemirror setup
+
+(or manually: adb tcpip ${PHONE_PORT}, then unplug)
+EOF
+}
+
+connect() {
+    local quiet=${1:-}
+    [ -n "$PHONE_IP" ] || die "PHONE_IP not set — run: pokemirror setup"
+
+    case "$(dev_state)" in
+        device) [ -n "$quiet" ] || info "already connected to $(serial)"; return 0 ;;
+        offline|unauthorized) adb disconnect "$(serial)" >/dev/null 2>&1 ;;
+    esac
+
+    local out
+    out=$(adb connect "$(serial)" 2>&1)
+    if [ "$(dev_state)" = device ]; then
+        [ -n "$quiet" ] || info "connected to $(serial)"
+        return 0
+    fi
+
+    case "$out" in
+        *unauthorized*)
+            warn "$out"
+            die "Phone shows an 'Allow USB debugging?' prompt — accept it (tick 'Always allow'), then retry." ;;
+        *)
+            warn "$out"
+            reboot_hint
+            return 1 ;;
+    esac
+}
+
+ensure_connected() {
+    connect quiet && return 0
+    return 1
+}
+
+# --- device queries --------------------------------------------------------
+
+ash() { adb -s "$(serial)" shell "$@" 2>/dev/null | tr -d '\r'; }
+
+panel_size() {
+    [ -n "$PANEL" ] && { printf '%s' "$PANEL"; return 0; }
+    # "Physical size: 1080x2400" (+ optionally "Override size: ...")
+    local s
+    s=$(ash wm size | awk -F': ' '/Physical size/ {print $2; exit}')
+    [ -n "$s" ] || return 1
+    printf '%s' "$s"
+}
+
+list_pkgs() {
+    ash pm list packages | sed 's/^package://'
+}
+
+resolve_pkg() {
+    local pattern=$1
+    list_pkgs | grep -iE "$pattern" | head -1
+}
+
+# resolve_and_cache <conf_key> <current_value> <pattern> <label>
+resolve_and_cache() {
+    local key=$1 cur=$2 pattern=$3 label=$4 pkg
+    if [ -n "$cur" ] && list_pkgs | grep -qxF "$cur"; then
+        printf '%s' "$cur"; return 0
+    fi
+    pkg=$(resolve_pkg "$pattern")
+    if [ -z "$pkg" ]; then
+        warn "$label not found on the phone. Installed Pokémon-ish packages:"
+        list_pkgs | grep -iE 'poke|niantic' >&2 || echo "  (none)" >&2
+        return 1
+    fi
+    save_conf_key "$key" "$pkg"
+    printf '%s' "$pkg"
+}
+
+# --- profiles --------------------------------------------------------------
+
+launch() {
+    local profile=$1 pkg res title args=()
+
+    ensure_connected || exit 1
+
+    res=$(panel_size) || die "could not read the phone's panel size (adb shell wm size)"
+
+    case "$profile" in
+        pogo)
+            pkg=$(resolve_and_cache PKG_POGO "$PKG_POGO" "$PAT_POGO" "Pokémon GO") || exit 1
+            title="Pokémon GO"
+            # Latency critical: ball throws are timing-sensitive, so no buffer.
+            args=(--video-buffer=0 --video-bit-rate=8M)
+            ;;
+        tcgp)
+            pkg=$(resolve_and_cache PKG_TCGP "$PKG_TCGP" "$PAT_TCGP" "Pokémon TCG Pocket") || exit 1
+            title="Pokémon TCG Pocket"
+            # Turn based: trade latency for a smoother pack-opening animation.
+            args=(--video-buffer=50 --video-bit-rate=6M)
+            ;;
+        *) die "unknown profile: $profile" ;;
+    esac
+
+    local base=(
+        --tcpip="$(serial)"
+        --video-codec=h265
+        --max-fps=60
+        --no-audio
+        --new-display="${res}/${DPI}"
+        --start-app="$pkg"
+        --window-title="$title"
+    )
+    [ "$VD_DECORATIONS" = 1 ] || base+=(--no-vd-system-decorations)
+    # shellcheck disable=SC2206
+    [ -n "$EXTRA_ARGS" ] && base+=($EXTRA_ARGS)
+
+    info "$title — ${res} @ ${DPI}dpi — $pkg"
+    dim "  scrcpy ${base[*]} ${args[*]}"
+
+    local tries=0 rc
+    while :; do
+        scrcpy "${base[@]}" "${args[@]}"
+        rc=$?
+        [ $rc -eq 0 ] && { info "closed"; return 0; }
+
+        tries=$((tries + 1))
+        if [ $tries -gt $RECONNECT_TRIES ]; then
+            die "gave up after $RECONNECT_TRIES reconnect attempts (last exit $rc)"
+        fi
+
+        if [ $rc -eq $EXIT_DISCONNECTED ]; then
+            warn "device disconnected — reconnecting (${tries}/${RECONNECT_TRIES})"
+        else
+            warn "scrcpy exited $rc — retrying (${tries}/${RECONNECT_TRIES})"
+        fi
+
+        adb disconnect "$(serial)" >/dev/null 2>&1
+        sleep $((tries < 3 ? 2 : 5))
+        if ! connect quiet; then
+            # A failed TCP connect after a working session usually means the
+            # phone rebooted and dropped out of tcpip mode.
+            reboot_hint
+            exit 1
+        fi
+    done
+}
+
+# --- commands --------------------------------------------------------------
+
+cmd_setup() {
+    local usb ip
+    info "Looking for a phone over USB…"
+    usb=$(usb_serial)
+    if [ -z "$usb" ]; then
+        cat <<EOF
+
+No USB device in 'adb devices'. Checklist:
+  1. Settings > About phone > tap "Build number" 7x  -> Developer options
+  2. Developer options > USB debugging: ON
+  3. Plug the phone in with a DATA cable, pick "File transfer" if asked
+  4. Accept the "Allow USB debugging?" prompt (tick "Always allow")
+
+Then re-run: pokemirror setup
+EOF
+        exit 1
+    fi
+    info "USB device: $usb"
+
+    ip=$(adb -s "$usb" shell ip route 2>/dev/null | tr -d '\r' \
+         | awk '/wlan[0-9]/ && /src/ {for (i=1;i<=NF;i++) if ($i=="src") print $(i+1)}' | head -1)
+    [ -n "$ip" ] || ip=$(adb -s "$usb" shell ip -o -4 addr show 2>/dev/null | tr -d '\r' \
+         | awk '/wlan[0-9]/ {split($4,a,"/"); print a[1]; exit}')
+    [ -n "$ip" ] || die "could not read the phone's Wi-Fi IP — is Wi-Fi on?"
+
+    info "Phone Wi-Fi IP: $ip"
+    warn "Set a static DHCP lease for $ip on the router, or this will drift."
+
+    adb -s "$usb" tcpip "$PHONE_PORT" >/dev/null 2>&1 || die "adb tcpip $PHONE_PORT failed"
+    sleep 2
+
+    PHONE_IP=$ip
+    save_conf_key PHONE_IP "$ip"
+    save_conf_key PHONE_PORT "$PHONE_PORT"
+
+    info "TCP debugging enabled on ${ip}:${PHONE_PORT}. You can unplug the USB cable now."
+    info "Note: this does NOT survive a phone reboot — re-run 'pokemirror setup' after one."
+
+    # Resolve and cache package names while the device is definitely reachable.
+    connect quiet || return 0
+    resolve_and_cache PKG_POGO "$PKG_POGO" "$PAT_POGO" "Pokémon GO" >/dev/null
+    resolve_and_cache PKG_TCGP "$PKG_TCGP" "$PAT_TCGP" "Pokémon TCG Pocket" >/dev/null
+    cmd_status
+}
+
+cmd_status() {
+    load_conf
+    printf 'config     %s\n' "$CONF"
+    printf 'phone      %s\n' "${PHONE_IP:-<unset — run: pokemirror setup>}"
+    [ -n "$PHONE_IP" ] || return 0
+    printf 'adb state  %s\n' "$(dev_state)"
+    if [ "$(dev_state)" != device ]; then
+        connect quiet >/dev/null 2>&1 || true
+    fi
+    if [ "$(dev_state)" = device ]; then
+        printf 'model      %s %s (Android %s)\n' \
+            "$(ash getprop ro.product.manufacturer)" \
+            "$(ash getprop ro.product.model)" \
+            "$(ash getprop ro.build.version.release)"
+        printf 'panel      %s @ %sdpi (virtual display uses %s)\n' \
+            "$(ash wm size | awk -F': ' '/Physical/{print $2}')" \
+            "$(ash wm density | awk -F': ' '/Physical/{print $2}')" "$DPI"
+        printf 'pogo       %s\n' "${PKG_POGO:-<unresolved>}"
+        printf 'tcgp       %s\n' "${PKG_TCGP:-<unresolved>}"
+    fi
+}
+
+cmd_apps() {
+    ensure_connected || exit 1
+    info "Pokémon-ish packages:"
+    list_pkgs | grep -iE 'poke|niantic|tcg' || echo "  (none matched)"
+}
+
+cmd_config() {
+    printf '%s\n\n' "$CONF"
+    [ -f "$CONF" ] && cat "$CONF" || echo "(does not exist yet — run: pokemirror setup)"
+}
+
+usage() { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; }
+
+main() {
+    need adb android-tools
+    need scrcpy
+    load_conf
+    case "${1:-}" in
+        setup)          cmd_setup ;;
+        pogo|tcgp)      launch "$1" ;;
+        connect)        connect ;;
+        status|"")      cmd_status ;;
+        apps)           cmd_apps ;;
+        config)         cmd_config ;;
+        -h|--help|help) usage ;;
+        *)              die "unknown command: $1  (try: pokemirror --help)" ;;
+    esac
+}
+
+main "$@"

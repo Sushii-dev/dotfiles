@@ -54,6 +54,9 @@ AUR_PKGS=(
     python-spotipy
 )
 
+# pokemirror: scrcpy phone mirroring (Pokémon GO / TCG Pocket run on the phone)
+PACMAN_PKGS+=(scrcpy android-tools android-udev)
+
 {{ if eq .chezmoi.hostname "Sushitop" -}}
 # KDE Plasma gaming session extras (kde-dank: tiling + DMS look in Plasma)
 PACMAN_PKGS+=(plasma-systemmonitor)
@@ -108,6 +111,13 @@ fi
 # Enable DMS systemd user services (color watchers for starship/border gradient)
 systemctl --user enable --now dms-starship.path 2>/dev/null || true
 systemctl --user enable --now dms-border-gradient.path 2>/dev/null || true
+
+# android-udev ships the adb device rules; membership in adbusers is what makes
+# them apply to this user (needed for the one-time USB `pokemirror setup`).
+if getent group adbusers &>/dev/null && ! id -nG "$USER" | grep -qw adbusers; then
+    echo "Adding $USER to adbusers (takes effect on next login)..."
+    sudo usermod -aG adbusers "$USER"
+fi
 
 # Albert launcher daemon (primary launcher; needed for the `albert toggle` keybind)
 systemctl --user enable --now albert.service 2>/dev/null || true

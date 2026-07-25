@@ -350,6 +350,21 @@ window-rule {
     open-floating true
     opacity 0.90
 }
+// scrcpy phone mirror (pokemirror). Both Pokémon titles are portrait locked,
+// so the window is floated at the phone's 9:20-ish aspect instead of being
+// stretched across the ultrawide.
+window-rule {
+    match app-id=r#"^scrcpy$"#
+    open-floating true
+    default-column-width { fixed 810; }
+    default-window-height { fixed 1800; }
+    geometry-corner-radius 12
+    clip-to-geometry true
+{{ if eq .chezmoi.hostname "Sushitop" }}
+    // DP-1 is the portrait panel — the only output a portrait phone fits on.
+    open-on-output "DP-1"
+{{ end }}
+}
 // Open dms windows as floating by default
 window-rule {
     match app-id=r#"org.quickshell$"#
