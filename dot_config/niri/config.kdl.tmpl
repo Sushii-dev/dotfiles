@@ -352,16 +352,20 @@ window-rule {
 }
 // scrcpy phone mirror (pokemirror). Both Pokémon titles are portrait locked,
 // so the window is floated at the phone's 9:20-ish aspect instead of being
-// stretched across the ultrawide.
+// stretched across the ultrawide. With FULLSCREEN=1 in the pokemirror config
+// scrcpy requests fullscreen itself and these dimensions are unused — that is
+// the intended setup on the portrait output, where it renders 1:1.
 window-rule {
     match app-id=r#"^scrcpy$"#
     open-floating true
-    default-column-width { fixed 810; }
-    default-window-height { fixed 1800; }
+    // Sized to fit the 1440-tall ultrawide when NOT fullscreen.
+    default-column-width { fixed 610; }
+    default-window-height { fixed 1350; }
     geometry-corner-radius 12
     clip-to-geometry true
 {{ if eq .chezmoi.hostname "Sushitop" }}
-    // DP-1 is the portrait panel — the only output a portrait phone fits on.
+    // DP-1 is the portrait panel (1920x1080 rotated 90 = 1080x1920 logical),
+    // the only output a portrait phone fits on without letterboxing.
     open-on-output "DP-1"
 {{ end }}
 }

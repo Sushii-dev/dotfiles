@@ -21,10 +21,16 @@
 #   PHONE_PORT=5555
 #   PKG_POGO=com.nianticlabs.pokemongo
 #   PKG_TCGP=jp.pokemon.pokemontcgp
-#   PANEL=1080x2400          # override the phone's native panel size
-#   DPI=420
+#   PANEL=1080x1920          # virtual display size; default = phone's native panel
+#   DPI=420                  # lower = smaller UI = more content on screen
+#   FULLSCREEN=1             # 1 -> scrcpy opens fullscreen (pairs with PANEL=output size)
 #   VD_DECORATIONS=0         # 1 -> drop --no-vd-system-decorations
 #   EXTRA_ARGS=              # appended verbatim to every scrcpy invocation
+#
+# To fill a portrait monitor edge to edge, set PANEL to the monitor's ROTATED
+# logical size and turn FULLSCREEN on — e.g. a 1920x1080 panel mounted at 90°
+# is logically 1080x1920, so PANEL=1080x1920 renders 1:1 with no rescaling.
+# Extra args can also be passed per launch: pokemirror pogo --print-fps
 
 set -uo pipefail
 
@@ -33,6 +39,7 @@ CONF="$CONF_DIR/config"
 
 PHONE_PORT=5555
 DPI=420
+FULLSCREEN=0
 VD_DECORATIONS=0
 PANEL=""
 PHONE_IP=""
@@ -176,6 +183,8 @@ resolve_and_cache() {
 
 launch() {
     local profile=$1 pkg res title args=()
+    shift
+    local cli_args=("$@")   # anything after the profile goes straight to scrcpy
 
     ensure_connected || exit 1
 
@@ -207,10 +216,12 @@ launch() {
         --window-title="$title"
     )
     [ "$VD_DECORATIONS" = 1 ] || base+=(--no-vd-system-decorations)
+    [ "$FULLSCREEN" = 1 ] && base+=(--fullscreen)
     # shellcheck disable=SC2206
     [ -n "$EXTRA_ARGS" ] && base+=($EXTRA_ARGS)
+    [ ${#cli_args[@]} -gt 0 ] && base+=("${cli_args[@]}")
 
-    info "$title — ${res} @ ${DPI}dpi — $pkg"
+    info "$title — ${res} @ ${DPI}dpi$([ "$FULLSCREEN" = 1 ] && echo ' — fullscreen') — $pkg"
     dim "  scrcpy ${base[*]} ${args[*]}"
 
     local tries=0 rc
@@ -371,7 +382,10 @@ EOF
 cmd_status() {
     load_conf
     printf 'config     %s\n' "$CONF"
-    printf 'phone      %s\n' "${PHONE_IP:-<unset — run: pokemirror setup>}"
+    printf 'display    %s @ %sdpi%s\n' \
+        "${PANEL:-<phone native>}" "$DPI" \
+        "$([ "$FULLSCREEN" = 1 ] && echo ', fullscreen')"
+    printf 'phone      %s\n' "${PHONE_IP:-<unset — run: pokemirror pair (or setup)>}"
     [ -n "$PHONE_IP" ] || return 0
     printf 'adb state  %s\n' "$(dev_state)"
     if [ "$(dev_state)" != device ]; then
@@ -401,7 +415,7 @@ cmd_config() {
     [ -f "$CONF" ] && cat "$CONF" || echo "(does not exist yet — run: pokemirror setup)"
 }
 
-usage() { sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; }
 
 main() {
     need adb android-tools
@@ -410,7 +424,7 @@ main() {
     case "${1:-}" in
         pair)           shift; cmd_pair "$@" ;;
         setup)          cmd_setup ;;
-        pogo|tcgp)      launch "$1" ;;
+        pogo|tcgp)      launch "$@" ;;
         connect)        connect ;;
         status|"")      cmd_status ;;
         apps)           cmd_apps ;;
