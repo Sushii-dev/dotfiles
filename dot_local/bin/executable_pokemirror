@@ -29,6 +29,8 @@
 #   AUDIO_BUFFER=            # ms; empty = 150 over Wi-Fi, 50 over USB.
 #   AUDIO_OUTPUT_BUFFER=     # ms; empty = 15 over Wi-Fi, 5 over USB.
 #                            #   Raise both if audio crackles or warbles.
+#   MAX_FPS=60               # phone-side encode cap. 30 roughly halves the
+#                            #   encoder's work if the phone is thermally throttling.
 #   PANEL=1080x1920          # virtual display size; default = phone's native panel
 #   DPI=420                  # lower = smaller UI = more content on screen
 #   FULLSCREEN=1             # 1 -> scrcpy opens fullscreen (pairs with PANEL=output size)
@@ -47,7 +49,7 @@
 
 set -uo pipefail
 
-CONF_KEYS='CONNECTION|CODEC|PANEL|DPI|FULLSCREEN|VD_DECORATIONS|EXTRA_ARGS|PHONE_IP|PHONE_PORT|PKG_POGO|PKG_TCGP|OUTPUT|AUDIO|AUDIO_BUFFER|AUDIO_OUTPUT_BUFFER'
+CONF_KEYS='CONNECTION|CODEC|PANEL|DPI|FULLSCREEN|VD_DECORATIONS|EXTRA_ARGS|PHONE_IP|PHONE_PORT|PKG_POGO|PKG_TCGP|OUTPUT|AUDIO|AUDIO_BUFFER|AUDIO_OUTPUT_BUFFER|MAX_FPS'
 
 # Snapshot deliberate one-off overrides (CONNECTION=usb pokemirror pogo) BEFORE
 # the defaults below are assigned. Assigning to an already-exported name would
@@ -72,6 +74,7 @@ OUTPUT=""           # KDE only: connector name to pin the window to, e.g. DP-1
 AUDIO=1             # 1 -> forward phone audio to the desktop (phone goes silent)
 AUDIO_BUFFER=""        # ms; empty = 150 over Wi-Fi, 50 over USB
 AUDIO_OUTPUT_BUFFER="" # ms; empty = 15 over Wi-Fi, scrcpy default (5) over USB
+MAX_FPS=60             # phone-side encode cap; drop to 30 if the phone throttles
 
 # Resolved by pick_transport().
 TRANSPORT=""
@@ -377,7 +380,7 @@ launch() {
     local base=(
         -s "$ADB_SERIAL"
         --video-codec="$CODEC"
-        --max-fps=60
+        --max-fps="$MAX_FPS"
         --new-display="${res}/${DPI}"
         --start-app="$pkg"
         --window-title="$title"
@@ -627,6 +630,16 @@ cmd_status() {
         printf 'panel      %s @ %sdpi (virtual display uses %s)\n' \
             "$(ash wm size | awk -F': ' '/Physical/{print $2}')" \
             "$(ash wm density | awk -F': ' '/Physical/{print $2}')" "$DPI"
+        # Android's thermal status: 0 none, 1 light, 2 moderate, 3 severe,
+        # 4 critical, 5 emergency, 6 shutdown. From 3 up the phone is actively
+        # throttling, which shows up as microstutters in both streams at once.
+        local therm
+        therm=$(ash dumpsys thermalservice | awk -F': ' '/Thermal Status/ {print $2; exit}')
+        case "${therm:-}" in
+            ''|0|1) printf 'thermal    %s\n' "${therm:-unknown}" ;;
+            2)      printf 'thermal    %s (moderate)\n' "$therm" ;;
+            *)      printf 'thermal    %s%s — THROTTLING%s\n' "$c_yel" "$therm" "$c_off" ;;
+        esac
         printf 'pogo       %s\n' "${PKG_POGO:-<unresolved>}"
         printf 'tcgp       %s\n' "${PKG_TCGP:-<unresolved>}"
     fi
