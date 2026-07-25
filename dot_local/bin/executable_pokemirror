@@ -7,6 +7,7 @@
 # taps — those are bannable in both titles and this script will never add them.
 #
 # Usage:
+#   pokemirror pair           one-time WIRELESS pairing (Android 11+, no cable)
 #   pokemirror setup          one-time USB pairing: enables adb over TCP, saves IP
 #   pokemirror pogo           launch Pokémon GO   (latency profile)
 #   pokemirror tcgp           launch TCG Pocket   (smoothness profile)
@@ -242,6 +243,86 @@ launch() {
 
 # --- commands --------------------------------------------------------------
 
+# Android 11+ wireless debugging. No cable, ever.
+#
+# The phone shows TWO different ports: the pairing dialog has its own one-shot
+# port, and the main Wireless debugging screen has the connect port. They are
+# not the same number, and the connect port is randomised every time wireless
+# debugging is toggled. So once paired we immediately ask adbd to also listen
+# on the fixed port 5555 — after that the random port stops mattering.
+#
+# Arch's android-tools is built without mDNS, so `adb mdns services` cannot
+# discover the ports for us; they have to be read off the phone screen.
+cmd_pair() {
+    local pair_hostport=${1:-} code=${2:-} ip conn_port out
+
+    cat <<EOF
+On the phone:
+  Settings > System > Developer options > ${c_grn}Wireless debugging${c_off}: ON
+  Tap ${c_grn}"Pair device with pairing code"${c_off}
+  Leave that dialog open — it shows an IP:PORT and a 6-digit code.
+
+EOF
+    if [ -z "$pair_hostport" ]; then
+        read -rp "IP:PORT from the pairing dialog: " pair_hostport
+    fi
+    [ -n "$pair_hostport" ] || die "no IP:PORT given"
+    ip=${pair_hostport%%:*}
+    [ "$ip" != "$pair_hostport" ] || die "expected IP:PORT (e.g. 192.168.1.50:37419), got: $pair_hostport"
+
+    if [ -z "$code" ]; then
+        read -rp "6-digit pairing code: " code
+    fi
+    [ -n "$code" ] || die "no pairing code given"
+
+    out=$(adb pair "$pair_hostport" "$code" 2>&1)
+    case "$out" in
+        *[Ss]uccessfully*) info "paired with $ip" ;;
+        *) warn "$out"; die "pairing failed — the dialog's port and code both change every time it is reopened, so close it, reopen it and use the fresh values." ;;
+    esac
+
+    echo
+    echo "Now close the pairing dialog. The main Wireless debugging screen shows"
+    echo "the phone's address with a ${c_grn}different${c_off} port — that is the connect port."
+    echo
+    read -rp "Connect port (just the number, after the colon): " conn_port
+    [ -n "$conn_port" ] || die "no connect port given"
+
+    out=$(adb connect "${ip}:${conn_port}" 2>&1)
+    if ! adb devices | grep -q "^${ip}:${conn_port}[[:space:]]*device"; then
+        warn "$out"
+        die "could not connect to ${ip}:${conn_port} — re-check the port on the Wireless debugging screen."
+    fi
+    info "connected on the wireless-debugging port ${conn_port}"
+
+    PHONE_IP=$ip
+    save_conf_key PHONE_IP "$ip"
+
+    # Promote to the fixed port so the random one never has to be read again.
+    if adb -s "${ip}:${conn_port}" tcpip "$PHONE_PORT" >/dev/null 2>&1 && sleep 2 && connect quiet; then
+        save_conf_key PHONE_PORT "$PHONE_PORT"
+        info "adbd now also listens on the fixed port ${PHONE_PORT}"
+        warn "Port ${PHONE_PORT} does NOT survive a phone reboot. After a reboot, either re-run"
+        warn "'pokemirror pair' (pairing itself persists — you only re-enter the connect port) or"
+        warn "'pokemirror setup' over USB."
+    else
+        # Some ROMs refuse `tcpip` over a wireless-debug transport. Fall back to
+        # the random port; it just has to be refreshed whenever it changes.
+        PHONE_PORT=$conn_port
+        save_conf_key PHONE_PORT "$conn_port"
+        warn "This ROM would not open port 5555 over wireless debugging; using ${conn_port}."
+        warn "That port changes whenever wireless debugging is toggled or the phone reboots —"
+        warn "re-run 'pokemirror pair' to refresh it (pairing itself is remembered)."
+    fi
+
+    warn "Set a static DHCP lease for ${ip} on the router, or the IP will drift."
+
+    resolve_and_cache PKG_POGO "$PKG_POGO" "$PAT_POGO" "Pokémon GO" >/dev/null
+    resolve_and_cache PKG_TCGP "$PKG_TCGP" "$PAT_TCGP" "Pokémon TCG Pocket" >/dev/null
+    echo
+    cmd_status
+}
+
 cmd_setup() {
     local usb ip
     info "Looking for a phone over USB…"
@@ -320,13 +401,14 @@ cmd_config() {
     [ -f "$CONF" ] && cat "$CONF" || echo "(does not exist yet — run: pokemirror setup)"
 }
 
-usage() { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; }
 
 main() {
     need adb android-tools
     need scrcpy
     load_conf
     case "${1:-}" in
+        pair)           shift; cmd_pair "$@" ;;
         setup)          cmd_setup ;;
         pogo|tcgp)      launch "$1" ;;
         connect)        connect ;;
