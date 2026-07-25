@@ -21,11 +21,18 @@
 #   PHONE_PORT=5555
 #   PKG_POGO=com.nianticlabs.pokemongo
 #   PKG_TCGP=jp.pokemon.pokemontcgp
+#   CONNECTION=auto          # auto | usb | tcp — auto prefers USB when plugged in
+#   CODEC=h265               # h264 decodes a touch faster on some setups
 #   PANEL=1080x1920          # virtual display size; default = phone's native panel
 #   DPI=420                  # lower = smaller UI = more content on screen
 #   FULLSCREEN=1             # 1 -> scrcpy opens fullscreen (pairs with PANEL=output size)
 #   VD_DECORATIONS=0         # 1 -> drop --no-vd-system-decorations
 #   EXTRA_ARGS=              # appended verbatim to every scrcpy invocation
+#
+# USB is the low-latency transport. Wi-Fi adds jitter that shows up exactly
+# where it hurts — Pokémon GO ball throws — and drops the link when the phone
+# roams or dozes. Under CONNECTION=auto a plugged-in phone always wins, and the
+# bit rate is raised because USB bandwidth is free.
 #
 # To fill a portrait monitor edge to edge, set PANEL to the monitor's ROTATED
 # logical size and turn FULLSCREEN on — e.g. a 1920x1080 panel mounted at 90°
@@ -33,6 +40,13 @@
 # Extra args can also be passed per launch: pokemirror pogo --print-fps
 
 set -uo pipefail
+
+CONF_KEYS='CONNECTION|CODEC|PANEL|DPI|FULLSCREEN|VD_DECORATIONS|EXTRA_ARGS|PHONE_IP|PHONE_PORT|PKG_POGO|PKG_TCGP'
+
+# Snapshot deliberate one-off overrides (CONNECTION=usb pokemirror pogo) BEFORE
+# the defaults below are assigned. Assigning to an already-exported name would
+# overwrite the environment too, so capturing any later than this loses them.
+ENV_OVERRIDES=$(printenv | grep -E "^(${CONF_KEYS})=" || true)
 
 CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/pokemirror"
 CONF="$CONF_DIR/config"
@@ -46,6 +60,12 @@ PHONE_IP=""
 PKG_POGO=""
 PKG_TCGP=""
 EXTRA_ARGS=""
+CONNECTION=auto     # auto | usb | tcp
+CODEC=h265
+
+# Resolved by pick_transport().
+TRANSPORT=""
+ADB_SERIAL=""
 
 # Package name patterns. Names are resolved on the device at runtime; these are
 # only search patterns, never assumed to be the real package id.
@@ -66,9 +86,15 @@ dim()   { printf '%s%s%s\n' "$c_dim" "$*" "$c_off"; }
 need() { command -v "$1" >/dev/null 2>&1 || die "$1 not installed (pacman -S ${2:-$1})"; }
 
 load_conf() {
-    [ -f "$CONF" ] || return 0
-    # shellcheck disable=SC1090
-    source "$CONF"
+    local kv
+    if [ -f "$CONF" ]; then
+        # shellcheck disable=SC1090
+        source "$CONF"
+    fi
+    # Environment beats the config file, so one-off overrides actually apply.
+    while IFS= read -r kv; do
+        [ -n "$kv" ] && declare -g "$kv"
+    done <<< "$ENV_OVERRIDES"
 }
 
 save_conf_key() {
@@ -95,6 +121,71 @@ dev_state() {
 
 usb_serial() {
     adb devices | awk '$2=="device" && $1 !~ /:/ {print $1; exit}'
+}
+
+# A USB device visible to the kernel but not to us — the udev rules from
+# android-udev grant access via the adbusers group, and group membership only
+# takes effect on a fresh login.
+usb_denied() {
+    adb devices 2>/dev/null | grep -q 'no permissions'
+}
+
+usb_perm_hint() {
+    cat >&2 <<EOF
+
+${c_yel}A phone is plugged in but adb has no permission to talk to it.${c_off}
+android-udev grants access through the 'adbusers' group. You are currently in:
+    $(id -nG)
+
+Fix it permanently by logging out and back in (group membership is set at login).
+To use it right now, in the terminal you launch pokemirror from:
+
+    adb kill-server
+    newgrp adbusers
+
+then re-run pokemirror inside that subshell.
+EOF
+}
+
+usb_missing_hint() {
+    cat >&2 <<EOF
+
+${c_yel}No USB phone in 'adb devices'.${c_off}
+  - use a DATA cable, not a charge-only one
+  - if a mode picker appears on the phone, choose "File transfer"
+  - Developer options > USB debugging must be ON
+  - accept the "Allow USB debugging?" prompt (tick "Always allow")
+
+Or set CONNECTION=tcp in ${CONF} to go back over Wi-Fi.
+EOF
+}
+
+# Decides which transport to use and sets TRANSPORT + ADB_SERIAL.
+# USB is preferred under 'auto': no Wi-Fi jitter, and bandwidth is free.
+pick_transport() {
+    local usb
+    case "$CONNECTION" in
+        usb)
+            usb=$(usb_serial)
+            if [ -z "$usb" ]; then
+                usb_denied && { usb_perm_hint; return 1; }
+                usb_missing_hint; return 1
+            fi
+            TRANSPORT=usb; ADB_SERIAL=$usb ;;
+        tcp)
+            ensure_connected || return 1
+            TRANSPORT=tcp; ADB_SERIAL=$(serial) ;;
+        auto)
+            usb=$(usb_serial)
+            if [ -n "$usb" ]; then
+                TRANSPORT=usb; ADB_SERIAL=$usb
+            else
+                usb_denied && usb_perm_hint
+                ensure_connected || return 1
+                TRANSPORT=tcp; ADB_SERIAL=$(serial)
+            fi ;;
+        *) die "CONNECTION must be auto, usb or tcp (got: $CONNECTION)" ;;
+    esac
 }
 
 reboot_hint() {
@@ -143,7 +234,7 @@ ensure_connected() {
 
 # --- device queries --------------------------------------------------------
 
-ash() { adb -s "$(serial)" shell "$@" 2>/dev/null | tr -d '\r'; }
+ash() { adb -s "${ADB_SERIAL:-$(serial)}" shell "$@" 2>/dev/null | tr -d '\r'; }
 
 panel_size() {
     [ -n "$PANEL" ] && { printf '%s' "$PANEL"; return 0; }
@@ -186,29 +277,34 @@ launch() {
     shift
     local cli_args=("$@")   # anything after the profile goes straight to scrcpy
 
-    ensure_connected || exit 1
+    pick_transport || exit 1
 
     res=$(panel_size) || die "could not read the phone's panel size (adb shell wm size)"
+
+    # Over USB there is bandwidth to spare, so spend it on picture quality; over
+    # Wi-Fi a fatter stream is the first thing to stutter when the link dips.
+    local rate_hi rate_lo
+    if [ "$TRANSPORT" = usb ]; then rate_hi=16M; rate_lo=12M; else rate_hi=8M; rate_lo=6M; fi
 
     case "$profile" in
         pogo)
             pkg=$(resolve_and_cache PKG_POGO "$PKG_POGO" "$PAT_POGO" "Pokémon GO") || exit 1
             title="Pokémon GO"
             # Latency critical: ball throws are timing-sensitive, so no buffer.
-            args=(--video-buffer=0 --video-bit-rate=8M)
+            args=(--video-buffer=0 --video-bit-rate="$rate_hi")
             ;;
         tcgp)
             pkg=$(resolve_and_cache PKG_TCGP "$PKG_TCGP" "$PAT_TCGP" "Pokémon TCG Pocket") || exit 1
             title="Pokémon TCG Pocket"
             # Turn based: trade latency for a smoother pack-opening animation.
-            args=(--video-buffer=50 --video-bit-rate=6M)
+            args=(--video-buffer=50 --video-bit-rate="$rate_lo")
             ;;
         *) die "unknown profile: $profile" ;;
     esac
 
     local base=(
-        --tcpip="$(serial)"
-        --video-codec=h265
+        -s "$ADB_SERIAL"
+        --video-codec="$CODEC"
         --max-fps=60
         --no-audio
         --new-display="${res}/${DPI}"
@@ -221,7 +317,7 @@ launch() {
     [ -n "$EXTRA_ARGS" ] && base+=($EXTRA_ARGS)
     [ ${#cli_args[@]} -gt 0 ] && base+=("${cli_args[@]}")
 
-    info "$title — ${res} @ ${DPI}dpi$([ "$FULLSCREEN" = 1 ] && echo ' — fullscreen') — $pkg"
+    info "$title — ${TRANSPORT^^} ${ADB_SERIAL} — ${res} @ ${DPI}dpi$([ "$FULLSCREEN" = 1 ] && echo ' — fullscreen') — $pkg"
     dim "  scrcpy ${base[*]} ${args[*]}"
 
     local tries=0 rc
@@ -241,13 +337,29 @@ launch() {
             warn "scrcpy exited $rc — retrying (${tries}/${RECONNECT_TRIES})"
         fi
 
-        adb disconnect "$(serial)" >/dev/null 2>&1
         sleep $((tries < 3 ? 2 : 5))
-        if ! connect quiet; then
-            # A failed TCP connect after a working session usually means the
-            # phone rebooted and dropped out of tcpip mode.
-            reboot_hint
-            exit 1
+
+        if [ "$TRANSPORT" = usb ]; then
+            # Nothing to reconnect over USB — either the cable is seated or it
+            # is not. Waiting beats spinning through the retry budget.
+            adb wait-for-device >/dev/null 2>&1 &
+            local waiter=$!
+            ( sleep 20; kill $waiter 2>/dev/null ) >/dev/null 2>&1 &
+            wait $waiter 2>/dev/null
+            ADB_SERIAL=$(usb_serial)
+            if [ -z "$ADB_SERIAL" ]; then
+                usb_denied && usb_perm_hint || usb_missing_hint
+                exit 1
+            fi
+            base[1]=$ADB_SERIAL
+        else
+            adb disconnect "$(serial)" >/dev/null 2>&1
+            if ! connect quiet; then
+                # A failed TCP connect after a working session usually means the
+                # phone rebooted and dropped out of tcpip mode.
+                reboot_hint
+                exit 1
+            fi
         fi
     done
 }
@@ -381,17 +493,30 @@ EOF
 
 cmd_status() {
     load_conf
+    local usb
+    usb=$(usb_serial)
     printf 'config     %s\n' "$CONF"
     printf 'display    %s @ %sdpi%s\n' \
         "${PANEL:-<phone native>}" "$DPI" \
         "$([ "$FULLSCREEN" = 1 ] && echo ', fullscreen')"
-    printf 'phone      %s\n' "${PHONE_IP:-<unset — run: pokemirror pair (or setup)>}"
-    [ -n "$PHONE_IP" ] || return 0
-    printf 'adb state  %s\n' "$(dev_state)"
-    if [ "$(dev_state)" != device ]; then
-        connect quiet >/dev/null 2>&1 || true
+    printf 'codec      %s\n' "$CODEC"
+    printf 'transport  %s\n' "$CONNECTION"
+    if [ -n "$usb" ]; then
+        printf 'usb        %s %s\n' "$usb" \
+            "$([ "$CONNECTION" != tcp ] && echo '(will be used)' || echo '(ignored: CONNECTION=tcp)')"
+    elif usb_denied; then
+        printf 'usb        %spresent but no permission — not in adbusers yet%s\n' "$c_yel" "$c_off"
+    else
+        printf 'usb        <not plugged in>\n'
     fi
-    if [ "$(dev_state)" = device ]; then
+    printf 'phone      %s\n' "${PHONE_IP:-<unset — run: pokemirror pair (or setup)>}"
+    [ -n "$PHONE_IP" ] || { [ -n "$usb" ] && ADB_SERIAL=$usb || return 0; }
+    if [ -n "$PHONE_IP" ]; then
+        printf 'adb state  %s\n' "$(dev_state)"
+        [ "$(dev_state)" = device ] || connect quiet >/dev/null 2>&1 || true
+        [ -n "$usb" ] || ADB_SERIAL=$(serial)
+    fi
+    if [ -n "$ADB_SERIAL" ] && [ -n "$(ash getprop ro.product.model)" ]; then
         printf 'model      %s %s (Android %s)\n' \
             "$(ash getprop ro.product.manufacturer)" \
             "$(ash getprop ro.product.model)" \
@@ -415,7 +540,7 @@ cmd_config() {
     [ -f "$CONF" ] && cat "$CONF" || echo "(does not exist yet — run: pokemirror setup)"
 }
 
-usage() { sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; }
 
 main() {
     need adb android-tools
