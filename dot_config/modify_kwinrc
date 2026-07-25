@@ -12,6 +12,15 @@ OVERRIDES = {
         "mouse-follows-focusEnabled": "true",
         "directional-navEnabled": "true",
     },
+    "Script-krohnkite": {
+        # Windows krohnkite must never manage. Steam is deliberately NOT here
+        # so the client tiles; gamescope stays ignored so games stay fullscreen.
+        "ignoreClass": (
+            "krunner,yakuake,spectacle,plasmashell,org.kde.plasmashell,ksplashqml,"
+            "org.kde.polkit-kde-authentication-agent-1,xwaylandvideobridge,gamescope,"
+            "org.kde.kded6,io.mgba.mGBA,io.mgba.mgba,scrcpy"
+        ),
+    },
 }
 
 lines = sys.stdin.read().splitlines()

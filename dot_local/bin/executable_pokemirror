@@ -23,6 +23,8 @@
 #   PKG_TCGP=jp.pokemon.pokemontcgp
 #   CONNECTION=auto          # auto | usb | tcp — auto prefers USB when plugged in
 #   CODEC=h265               # h264 decodes a touch faster on some setups
+#   OUTPUT=DP-1              # KDE only: pin the window to this connector
+#                            #   (under niri the window rule in config.kdl does this)
 #   PANEL=1080x1920          # virtual display size; default = phone's native panel
 #   DPI=420                  # lower = smaller UI = more content on screen
 #   FULLSCREEN=1             # 1 -> scrcpy opens fullscreen (pairs with PANEL=output size)
@@ -41,7 +43,7 @@
 
 set -uo pipefail
 
-CONF_KEYS='CONNECTION|CODEC|PANEL|DPI|FULLSCREEN|VD_DECORATIONS|EXTRA_ARGS|PHONE_IP|PHONE_PORT|PKG_POGO|PKG_TCGP'
+CONF_KEYS='CONNECTION|CODEC|PANEL|DPI|FULLSCREEN|VD_DECORATIONS|EXTRA_ARGS|PHONE_IP|PHONE_PORT|PKG_POGO|PKG_TCGP|OUTPUT'
 
 # Snapshot deliberate one-off overrides (CONNECTION=usb pokemirror pogo) BEFORE
 # the defaults below are assigned. Assigning to an already-exported name would
@@ -62,6 +64,7 @@ PKG_TCGP=""
 EXTRA_ARGS=""
 CONNECTION=auto     # auto | usb | tcp
 CODEC=h265
+OUTPUT=""           # KDE only: connector name to pin the window to, e.g. DP-1
 
 # Resolved by pick_transport().
 TRANSPORT=""
@@ -270,6 +273,62 @@ resolve_and_cache() {
     printf '%s' "$pkg"
 }
 
+# --- window placement ------------------------------------------------------
+#
+# Wayland clients cannot place their own windows, so scrcpy's --fullscreen lands
+# on whatever output the compositor chose. Under niri a window rule handles it.
+# Under KWin the equivalent is a scripting call: a kwinrulesrc `screen=` rule
+# does NOT work here, because scrcpy is already fullscreen by the time the rule
+# would apply and KWin just pins it to the wrong output.
+#
+# sendClientToScreen only takes effect while the window is NOT fullscreen, and
+# the fullScreen write round-trips to the client asynchronously, so this drops
+# fullscreen, moves, and re-applies it — then repeats, because the window may
+# not exist yet when scrcpy is still pushing its server jar.
+
+kwin_present() { busctl --user status org.kde.KWin >/dev/null 2>&1; }
+
+kwin_place_once() {
+    local target=$1 js id
+    js=$(mktemp --tmpdir pokemirror-place-XXXXXX.js)
+    cat > "$js" <<EOF
+const TARGET = "${target}";
+let scr = null;
+for (const s of workspace.screens) { if (s.name === TARGET) scr = s; }
+if (scr) {
+  for (const w of workspace.windowList()) {
+    if ((w.resourceClass || "").toString().indexOf("scrcpy") === -1) continue;
+    if (w.output && w.output.name === TARGET && w.fullScreen) continue;
+    w.fullScreen = false;
+    workspace.sendClientToScreen(w, scr);
+    w.fullScreen = true;
+  }
+}
+EOF
+    id=$(busctl --user call org.kde.KWin /Scripting org.kde.kwin.Scripting \
+            loadScript ss "$js" "pokemirror-place" 2>/dev/null | awk '{print $2}')
+    if [ -n "$id" ]; then
+        busctl --user call "org.kde.KWin" "/Scripting/Script${id}" \
+            org.kde.kwin.Script run >/dev/null 2>&1
+        busctl --user call org.kde.KWin /Scripting org.kde.kwin.Scripting \
+            unloadScript s "pokemirror-place" >/dev/null 2>&1
+    fi
+    rm -f "$js"
+}
+
+# Fire and forget: scrcpy blocks in the foreground, so the placer runs behind it.
+kwin_place_async() {
+    local target=$1
+    [ -n "$target" ] || return 0
+    kwin_present || return 0
+    (
+        for delay in 2 2 3 4; do
+            sleep "$delay"
+            kwin_place_once "$target"
+        done
+    ) >/dev/null 2>&1 &
+}
+
 # --- profiles --------------------------------------------------------------
 
 launch() {
@@ -322,6 +381,7 @@ launch() {
 
     local tries=0 rc
     while :; do
+        kwin_place_async "$OUTPUT"
         scrcpy "${base[@]}" "${args[@]}"
         rc=$?
         [ $rc -eq 0 ] && { info "closed"; return 0; }
@@ -500,6 +560,7 @@ cmd_status() {
         "${PANEL:-<phone native>}" "$DPI" \
         "$([ "$FULLSCREEN" = 1 ] && echo ', fullscreen')"
     printf 'codec      %s\n' "$CODEC"
+    printf 'output     %s\n' "${OUTPUT:-<compositor decides>}"
     printf 'transport  %s\n' "$CONNECTION"
     if [ -n "$usb" ]; then
         printf 'usb        %s %s\n' "$usb" \
@@ -540,7 +601,7 @@ cmd_config() {
     [ -f "$CONF" ] && cat "$CONF" || echo "(does not exist yet — run: pokemirror setup)"
 }
 
-usage() { sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,42p' "$0" | sed 's/^# \{0,1\}//'; }
 
 main() {
     need adb android-tools
