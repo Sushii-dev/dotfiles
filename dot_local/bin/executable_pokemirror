@@ -25,6 +25,8 @@
 #   CODEC=h265               # h264 decodes a touch faster on some setups
 #   OUTPUT=DP-1              # KDE only: pin the window to this connector
 #                            #   (under niri the window rule in config.kdl does this)
+#   AUDIO=1                  # forward phone audio to the desktop's default sink
+#   AUDIO_BUFFER=            # ms; empty = scrcpy default (50). Raise if it crackles.
 #   PANEL=1080x1920          # virtual display size; default = phone's native panel
 #   DPI=420                  # lower = smaller UI = more content on screen
 #   FULLSCREEN=1             # 1 -> scrcpy opens fullscreen (pairs with PANEL=output size)
@@ -43,7 +45,7 @@
 
 set -uo pipefail
 
-CONF_KEYS='CONNECTION|CODEC|PANEL|DPI|FULLSCREEN|VD_DECORATIONS|EXTRA_ARGS|PHONE_IP|PHONE_PORT|PKG_POGO|PKG_TCGP|OUTPUT'
+CONF_KEYS='CONNECTION|CODEC|PANEL|DPI|FULLSCREEN|VD_DECORATIONS|EXTRA_ARGS|PHONE_IP|PHONE_PORT|PKG_POGO|PKG_TCGP|OUTPUT|AUDIO|AUDIO_BUFFER'
 
 # Snapshot deliberate one-off overrides (CONNECTION=usb pokemirror pogo) BEFORE
 # the defaults below are assigned. Assigning to an already-exported name would
@@ -65,6 +67,8 @@ EXTRA_ARGS=""
 CONNECTION=auto     # auto | usb | tcp
 CODEC=h265
 OUTPUT=""           # KDE only: connector name to pin the window to, e.g. DP-1
+AUDIO=1             # 1 -> forward phone audio to the desktop (phone goes silent)
+AUDIO_BUFFER=""     # ms; empty = scrcpy default (50)
 
 # Resolved by pick_transport().
 TRANSPORT=""
@@ -296,9 +300,15 @@ const TARGET = "${target}";
 let scr = null;
 for (const s of workspace.screens) { if (s.name === TARGET) scr = s; }
 if (scr) {
+  const g = scr.geometry;
   for (const w of workspace.windowList()) {
     if ((w.resourceClass || "").toString().indexOf("scrcpy") === -1) continue;
-    if (w.output && w.output.name === TARGET && w.fullScreen) continue;
+    // fullScreen can read true while the client is still sized to its own
+    // default (70% of the screen), so the geometry has to agree too — otherwise
+    // later passes skip a window that is fullscreen in name only.
+    const f = w.frameGeometry;
+    if (w.output && w.output.name === TARGET && w.fullScreen &&
+        f.width === g.width && f.height === g.height) continue;
     w.fullScreen = false;
     workspace.sendClientToScreen(w, scr);
     w.fullScreen = true;
@@ -322,7 +332,7 @@ kwin_place_async() {
     [ -n "$target" ] || return 0
     kwin_present || return 0
     (
-        for delay in 2 2 3 4; do
+        for delay in 2 2 3 4 5; do
             sleep "$delay"
             kwin_place_once "$target"
         done
@@ -365,13 +375,22 @@ launch() {
         -s "$ADB_SERIAL"
         --video-codec="$CODEC"
         --max-fps=60
-        --no-audio
         --new-display="${res}/${DPI}"
         --start-app="$pkg"
         --window-title="$title"
     )
     [ "$VD_DECORATIONS" = 1 ] || base+=(--no-vd-system-decorations)
     [ "$FULLSCREEN" = 1 ] && base+=(--fullscreen)
+    if [ "$AUDIO" = 1 ]; then
+        # --audio-source=output (scrcpy's default) forwards the whole device
+        # output AND silences the phone's own speaker, which is the point: sound
+        # arrives on whatever PipeWire calls the default sink. Opus is the
+        # lowest-latency codec scrcpy offers.
+        base+=(--audio-codec=opus)
+        [ -n "$AUDIO_BUFFER" ] && base+=(--audio-buffer="$AUDIO_BUFFER")
+    else
+        base+=(--no-audio)
+    fi
     # shellcheck disable=SC2206
     [ -n "$EXTRA_ARGS" ] && base+=($EXTRA_ARGS)
     [ ${#cli_args[@]} -gt 0 ] && base+=("${cli_args[@]}")
@@ -561,6 +580,8 @@ cmd_status() {
         "$([ "$FULLSCREEN" = 1 ] && echo ', fullscreen')"
     printf 'codec      %s\n' "$CODEC"
     printf 'output     %s\n' "${OUTPUT:-<compositor decides>}"
+    printf 'audio      %s\n' \
+        "$([ "$AUDIO" = 1 ] && echo "-> $(pactl get-default-sink 2>/dev/null || echo 'desktop default sink')" || echo 'off (plays on phone)')"
     printf 'transport  %s\n' "$CONNECTION"
     if [ -n "$usb" ]; then
         printf 'usb        %s %s\n' "$usb" \
