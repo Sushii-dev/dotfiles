@@ -49,7 +49,7 @@
 
 set -uo pipefail
 
-CONF_KEYS='CONNECTION|CODEC|PANEL|DPI|FULLSCREEN|VD_DECORATIONS|EXTRA_ARGS|PHONE_IP|PHONE_PORT|PKG_POGO|PKG_TCGP|OUTPUT|AUDIO|AUDIO_BUFFER|AUDIO_OUTPUT_BUFFER|MAX_FPS'
+CONF_KEYS='CONNECTION|CODEC|PANEL|DPI|FULLSCREEN|VD_DECORATIONS|EXTRA_ARGS|PHONE_IP|PHONE_PORT|PKG_POGO|PKG_TCGP|OUTPUT|AUDIO|AUDIO_BUFFER|AUDIO_OUTPUT_BUFFER|MAX_FPS|KEEP_ON_DISPLAY'
 
 # Snapshot deliberate one-off overrides (CONNECTION=usb pokemirror pogo) BEFORE
 # the defaults below are assigned. Assigning to an already-exported name would
@@ -75,6 +75,7 @@ AUDIO=1             # 1 -> forward phone audio to the desktop (phone goes silent
 AUDIO_BUFFER=""        # ms; empty = 150 over Wi-Fi, 50 over USB
 AUDIO_OUTPUT_BUFFER="" # ms; empty = 15 over Wi-Fi, scrcpy default (5) over USB
 MAX_FPS=60             # phone-side encode cap; drop to 30 if the phone throttles
+KEEP_ON_DISPLAY=1      # move the app back if it restarts onto the phone's screen
 
 # Resolved by pick_transport().
 TRANSPORT=""
@@ -147,16 +148,17 @@ usb_perm_hint() {
     cat >&2 <<EOF
 
 ${c_yel}A phone is plugged in but adb has no permission to talk to it.${c_off}
-android-udev grants access through the 'adbusers' group. You are currently in:
-    $(id -nG)
+android-udev gates adb behind the 'adbusers' group, which only applies at login.
+/etc/udev/rules.d/52-android-uaccess.rules is supposed to sidestep that by
+ACLing the device to the active session — check it exists and covers this
+phone's USB vendor id (\`lsusb\` to find it; 04e8 is Samsung):
 
-Fix it permanently by logging out and back in (group membership is set at login).
-To use it right now, in the terminal you launch pokemirror from:
+    sudo udevadm control --reload-rules && sudo udevadm trigger
+
+Failing that, in the terminal you launch pokemirror from:
 
     adb kill-server
     newgrp adbusers
-
-then re-run pokemirror inside that subshell.
 EOF
 }
 
@@ -345,6 +347,59 @@ kwin_place_async() {
     ) >/dev/null 2>&1 &
 }
 
+# --- keeping the app on the virtual display --------------------------------
+#
+# --start-app places the app on the virtual display exactly once. When the app
+# restarts itself — after an update, or its own "restarting" flow — Android
+# launches the new task on the DEFAULT display instead. The mirror then shows an
+# empty virtual display while audio keeps playing, because --audio-source=output
+# captures the whole device and does not care which display the app is on.
+#
+# The app is moved back whenever it is running on a display that is not ours.
+# A package with no activity record anywhere is left alone, but note that a
+# crash or force-stop usually leaves Android resurrecting the task on the
+# default display, and that gets pulled back too — self-healing rather than a
+# deliberate-quit detector. To actually stop it, close the mirror; the watcher
+# dies with scrcpy.
+
+app_display() {
+    ash dumpsys activity activities | awk -v pkg="$1" '
+        /Display #[0-9]+ \(activities/ { n=$0; sub(/.*Display #/,"",n); sub(/ .*/,"",n); cur=n }
+        index($0,pkg) && index($0,"ActivityRecord") { print cur; exit }'
+}
+
+keep_on_display() {
+    local pkg=$1 did=$2 comp cur
+    comp=$(ash cmd package resolve-activity --brief -c android.intent.category.LAUNCHER "$pkg" | tail -1)
+    case "$comp" in
+        */*) ;;
+        *) return 0 ;;   # could not resolve a launch component; do nothing
+    esac
+    while sleep 5; do
+        cur=$(app_display "$pkg")
+        [ -z "$cur" ] && continue           # not running: deliberate quit
+        [ "$cur" = "$did" ] && continue     # already where it belongs
+        warn "app restarted onto display $cur — moving it back to $did"
+        ash am start --display "$did" -n "$comp" >/dev/null
+    done
+}
+
+# scrcpy reports the virtual display id on stdout once the server is up, so the
+# watcher waits for it to appear in the tee'd log rather than guessing.
+keep_on_display_async() {
+    local pkg=$1 logf=$2 did=""
+    [ "$KEEP_ON_DISPLAY" = 1 ] || return 0
+    (
+        for _ in $(seq 1 30); do
+            sleep 1
+            did=$(grep -o 'New display: [^(]*(id=[0-9]*)' "$logf" 2>/dev/null \
+                  | tail -1 | grep -o '[0-9]*)' | tr -d ')')
+            [ -n "$did" ] && break
+        done
+        [ -n "$did" ] && keep_on_display "$pkg" "$did"
+    ) >/dev/null &
+}
+
 # --- profiles --------------------------------------------------------------
 
 launch() {
@@ -422,11 +477,16 @@ launch() {
     info "$title — ${TRANSPORT^^} ${ADB_SERIAL} — ${res} @ ${DPI}dpi$([ "$FULLSCREEN" = 1 ] && echo ' — fullscreen') — $pkg"
     dim "  scrcpy ${base[*]} ${args[*]}"
 
-    local tries=0 rc
+    local tries=0 rc logf watcher
     while :; do
         kwin_place_async "$OUTPUT"
-        scrcpy "${base[@]}" "${args[@]}"
-        rc=$?
+        logf=$(mktemp --tmpdir pokemirror-log-XXXXXX)
+        keep_on_display_async "$pkg" "$logf"
+        watcher=$!
+        scrcpy "${base[@]}" "${args[@]}" 2>&1 | tee "$logf"
+        rc=${PIPESTATUS[0]}
+        [ -n "$watcher" ] && kill "$watcher" 2>/dev/null
+        rm -f "$logf"
         [ $rc -eq 0 ] && { info "closed"; return 0; }
 
         tries=$((tries + 1))
