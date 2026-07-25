@@ -386,8 +386,16 @@ launch() {
         # output AND silences the phone's own speaker, which is the point: sound
         # arrives on whatever PipeWire calls the default sink. Opus is the
         # lowest-latency codec scrcpy offers.
-        base+=(--audio-codec=opus)
-        [ -n "$AUDIO_BUFFER" ] && base+=(--audio-buffer="$AUDIO_BUFFER")
+        #
+        # Crackle is the audio buffer running dry. Wi-Fi delivers packets in
+        # bursts, so it needs a much deeper buffer than USB — scrcpy's 50ms
+        # default is a USB number. The cost is audio latency, which matters far
+        # less than dropouts because the video has its own separate buffer.
+        local abuf=$AUDIO_BUFFER
+        if [ -z "$abuf" ]; then
+            [ "$TRANSPORT" = usb ] && abuf=50 || abuf=150
+        fi
+        base+=(--audio-codec=opus --audio-buffer="$abuf")
     else
         base+=(--no-audio)
     fi
