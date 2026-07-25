@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Toggle the Albert launcher window.
+#
+# albert 35.0.0's CLI RPC client segfaults on any `albert <command>` invocation:
+# it NULL-derefs before it even connects to the instance socket, so the packaged
+# `albert toggle` is unusable as a global-shortcut target. The daemon side of the
+# IPC is fine, so speak to its socket directly — it expects a JSON array of
+# strings. Drop this wrapper once upstream ships a fix (>35.0.0).
+set -u
+
+socket="${XDG_CACHE_HOME:-$HOME/.cache}/albert/ipc_socket"
+
+send() {
+    printf '["toggle"]' | socat -t2 - "UNIX-CONNECT:$socket" 2>/dev/null
+}
+
+if [ -S "$socket" ] && send; then
+    exit 0
+fi
+
+# No live instance (or a stale socket): bring the daemon up and retry until it
+# answers.
+systemctl --user start albert.service
+for _ in $(seq 1 30); do
+    sleep 0.2
+    if [ -S "$socket" ] && send; then
+        exit 0
+    fi
+done
+
+exit 1
