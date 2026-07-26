@@ -42,6 +42,9 @@
 #   DUO_ASPECT=auto          # pane aspect; auto = phone panel, so panes match
 #   DUO_PANEL=               # override the computed pane size, e.g. 800x1400
 #   DUO_MIRROR_DISPLAY=0     # phone display pane 2 mirrors (0 cover, 1 inner)
+#   DUO_MODE=nested          # nested = ONE window holding both panes (movable and
+#                            #   scalable as a unit, via a nested sway compositor);
+#                            #   separate = two independent windows
 #
 # Duo mode shows two accounts at once. Pane 1 is the normal install on its own
 # virtual display, started automatically. Pane 2 MIRRORS THE PHONE'S OWN SCREEN,
@@ -62,7 +65,7 @@
 
 set -uo pipefail
 
-CONF_KEYS='CONNECTION|CODEC|PANEL|DPI|FULLSCREEN|VD_DECORATIONS|EXTRA_ARGS|PHONE_IP|PHONE_PORT|PKG_POGO|PKG_TCGP|OUTPUT|AUDIO|AUDIO_BUFFER|AUDIO_OUTPUT_BUFFER|MAX_FPS|KEEP_ON_DISPLAY|DUO_OUTPUT|DUO_GAP|DUO_ASPECT|DUO_PANEL|DUO_USER|DUO_MIRROR_DISPLAY'
+CONF_KEYS='CONNECTION|CODEC|PANEL|DPI|FULLSCREEN|VD_DECORATIONS|EXTRA_ARGS|PHONE_IP|PHONE_PORT|PKG_POGO|PKG_TCGP|OUTPUT|AUDIO|AUDIO_BUFFER|AUDIO_OUTPUT_BUFFER|MAX_FPS|KEEP_ON_DISPLAY|DUO_OUTPUT|DUO_GAP|DUO_ASPECT|DUO_PANEL|DUO_USER|DUO_MIRROR_DISPLAY|DUO_MODE'
 
 # Snapshot deliberate one-off overrides (CONNECTION=usb pokemirror pogo) BEFORE
 # the defaults below are assigned. Assigning to an already-exported name would
@@ -95,6 +98,7 @@ DUO_ASPECT="auto"      # pane aspect; auto = the phone panel, so both panes matc
 DUO_PANEL=""           # override the computed per-pane size, e.g. 800x1400
 DUO_USER=""            # Secure Folder user id; informational only (autodetected)
 DUO_MIRROR_DISPLAY=0   # phone display the 2nd pane mirrors (0 = cover, 1 = inner)
+DUO_MODE=nested        # nested = one window holding both panes | separate = two windows
 
 # Resolved by pick_transport().
 TRANSPORT=""
@@ -470,6 +474,112 @@ for o in json.load(sys.stdin).get("outputs", []):
 ' "$1" "$2" "$DUO_ASPECT"
 }
 
+# --- nested mode: both panes inside ONE host window ------------------------
+#
+# scrcpy opens one toplevel per instance and there is no way to make it share a
+# window. To get a single thing to move and scale, a nested wlroots compositor
+# (sway, already installed) runs as one Wayland client on the KDE session and
+# tiles both scrcpy instances inside it. Its own toplevel is then the single
+# window, and the nested output tracks that toplevel's size — resize the window
+# and both panes resize with it.
+#
+# Measured on this machine: at rest the nested output matches the host window
+# exactly (1060x454 == 1060x454). It does follow resizes, but not always to the
+# exact frame size — maximising gave a 1080x1920 frame and a 1060x918 nested
+# output, i.e. the panes rescale but can leave a black margin. sway's own
+# `output WL-1 resolution` is ignored by the wayland backend, and kdotool's
+# windowsize is a no-op under this KWin (verified against a control window), so
+# the initial size has to come from a KWin rule instead.
+
+kwin_nested_size_rule() {
+    local w=$1 h=$2
+    kwin_present || return 0
+    python3 - "$w" "$h" <<'PY' >/dev/null 2>&1 || return 0
+import configparser, os, sys, uuid
+w, h = sys.argv[1], sys.argv[2]
+p = os.path.expanduser("~/.config/kwinrulesrc")
+c = configparser.RawConfigParser(); c.optionxform = str; c.read(p)
+sid = None
+for s in c.sections():
+    if c.has_option(s, "Description") and "pokemirror duo" in c.get(s, "Description"):
+        sid = s
+if sid is None:
+    sid = str(uuid.uuid4()); c.add_section(sid)
+c.set(sid, "Description", "pokemirror duo (nested compositor) initial size")
+c.set(sid, "clientmachine", "localhost")
+c.set(sid, "wmclass", "wlroots")     # wlroots' wayland backend app_id
+c.set(sid, "wmclassmatch", "1")      # exact; substring matching did not apply
+c.set(sid, "size", "%s,%s" % (w, h))
+c.set(sid, "sizerule", "2")          # 2 = Apply Initially (Force did not apply)
+ids = [s for s in c.sections() if s != "General"]
+if not c.has_section("General"): c.add_section("General")
+c.set("General", "count", str(len(ids)))
+c.set("General", "rules", ",".join(ids))
+with open(p, "w") as fh: c.write(fh, space_around_delimiters=False)
+PY
+    busctl --user call org.kde.KWin /KWin org.kde.KWin reconfigure >/dev/null 2>&1
+}
+
+launch_duo_nested() {
+    local title=$1 pw=$2 ph=$3 gap=$4; shift 4
+    local a_cmd=$1 b_cmd=$2
+
+    command -v sway >/dev/null 2>&1 || die "sway is not installed (pacman -S sway) — needed for DUO_MODE=nested"
+
+    local dir cfg sock
+    dir=$(mktemp -d --tmpdir pokemirror-nested-XXXXXX)
+    cfg="$dir/sway.conf"
+    # Per-session socket: a fixed path means a second session cannot bind and
+    # silently ends up somewhere else, and then swaymsg talks to the wrong one.
+    sock="$dir/sway.sock"
+
+    printf '%s\n' '#!/usr/bin/env bash' "exec $a_cmd" > "$dir/pane-a"
+    printf '%s\n' '#!/usr/bin/env bash' "exec $b_cmd" > "$dir/pane-b"
+    chmod +x "$dir/pane-a" "$dir/pane-b"
+
+    # Quit the nested session once both panes are gone, so closing the games
+    # closes the window instead of leaving an empty compositor behind.
+    # Ask sway about ITS OWN tree rather than counting scrcpy processes globally,
+    # so a second nested session running alongside cannot make this one quit.
+    cat > "$dir/reaper" <<REAP
+#!/usr/bin/env bash
+export SWAYSOCK="$sock"
+sleep 10
+while :; do
+    n=\$(swaymsg -t get_tree 2>/dev/null | grep -c '"pid":' )
+    [ "\${n:-0}" -eq 0 ] && break
+    sleep 2
+done
+swaymsg exit >/dev/null 2>&1
+REAP
+    chmod +x "$dir/reaper"
+
+    cat > "$cfg" <<EOF
+# generated by pokemirror — nested duo session
+default_border none
+default_floating_border none
+focus_follows_mouse no
+output * bg #101010 solid_color
+gaps inner $gap
+bindsym Mod4+Shift+e exec swaymsg exit
+exec $dir/pane-a
+exec $dir/pane-b
+exec $dir/reaper
+EOF
+
+    # Two panes plus the gap between them, so each tile lands on the phone's
+    # own aspect and scrcpy does not letterbox inside its tile.
+    kwin_nested_size_rule $((2 * pw + 3 * gap)) $((ph + 2 * gap))
+
+    info "nested session — one window ($((2 * pw + 3 * gap))x$((ph + 2 * gap))) holding two ${pw}x${ph} panes; drag to move, drag an edge to scale"
+    SWAYSOCK="$sock" sway --unsupported-gpu -c "$cfg"
+    local rc=$?
+    # Only reap the panes this session started; another duo session may be up.
+    pkill -f "^$dir/pane-" >/dev/null 2>&1
+    rm -rf "$dir"
+    return $rc
+}
+
 duo_place() {
     local title=$1 x=$2 y=$3 w=$4 h=$5 id
     command -v kdotool >/dev/null 2>&1 || return 0
@@ -560,6 +670,21 @@ EOF
         --window-title="$title — Secure Folder"
         --no-audio
     )
+
+    if [ "$DUO_MODE" = nested ]; then
+        # sway applies its inner gap at the edges too, so the host window has to
+        # carry three gaps across and two down on top of the panes themselves.
+        # Shrink the panes to fit rather than letting them overflow the output.
+        local nph npw anum aden
+        anum=${DUO_ASPECT%:*}; aden=${DUO_ASPECT#*:}
+        nph=$((ph - 2 * DUO_GAP))
+        npw=$(( (nph * anum / aden) / 2 * 2 ))
+        info "nested panes ${npw}x${nph} (shrunk from ${pw}x${ph} to leave room for gaps)"
+        launch_duo_nested "$title" "$npw" "$nph" "$DUO_GAP" \
+            "$(printf '%q ' scrcpy "${a_args[@]}")" \
+            "$(printf '%q ' scrcpy "${b_args[@]}")"
+        return $?
+    fi
 
     local loga logb pida pidb
     loga=$(mktemp --tmpdir pokemirror-duo-a-XXXXXX)
@@ -904,7 +1029,7 @@ cmd_config() {
     [ -f "$CONF" ] && cat "$CONF" || echo "(does not exist yet — run: pokemirror setup)"
 }
 
-usage() { sed -n '2,61p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,64p' "$0" | sed 's/^# \{0,1\}//'; }
 
 main() {
     need adb android-tools

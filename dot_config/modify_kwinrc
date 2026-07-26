@@ -18,7 +18,7 @@ OVERRIDES = {
         "ignoreClass": (
             "krunner,yakuake,spectacle,plasmashell,org.kde.plasmashell,ksplashqml,"
             "org.kde.polkit-kde-authentication-agent-1,xwaylandvideobridge,gamescope,"
-            "org.kde.kded6,io.mgba.mGBA,io.mgba.mgba,scrcpy"
+            "org.kde.kded6,io.mgba.mGBA,io.mgba.mgba,scrcpy,wlroots"
         ),
     },
 }
