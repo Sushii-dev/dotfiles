@@ -369,6 +369,20 @@ window-rule {
     open-on-output "DP-1"
 {{ end }}
 }
+// pokemirror duo in nested mode: both panes live inside one nested sway
+// compositor, whose own toplevel reports app-id "wlroots". Under KDE the
+// equivalent sizing comes from a kwinrulesrc rule the script writes itself.
+window-rule {
+    match app-id=r#"^wlroots$"#
+    open-floating true
+    default-column-width { fixed 1248; }
+    default-window-height { fixed 1400; }
+    geometry-corner-radius 12
+    clip-to-geometry true
+{{ if eq .chezmoi.hostname "Sushitop" }}
+    open-on-output "DP-2"
+{{ end }}
+}
 // Open dms windows as floating by default
 window-rule {
     match app-id=r#"org.quickshell$"#
