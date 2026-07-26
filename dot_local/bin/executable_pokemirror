@@ -11,6 +11,7 @@
 #   pokemirror setup          one-time USB pairing: enables adb over TCP, saves IP
 #   pokemirror pogo           launch Pokémon GO   (latency profile)
 #   pokemirror tcgp           launch TCG Pocket   (smoothness profile)
+#   pokemirror duo [profile]  two accounts side by side (main + Secure Folder)
 #   pokemirror connect        connect adb over TCP only
 #   pokemirror status         show connection, resolved packages, panel size
 #   pokemirror apps           list Pokémon-ish packages on the phone
@@ -36,6 +37,16 @@
 #   FULLSCREEN=1             # 1 -> scrcpy opens fullscreen (pairs with PANEL=output size)
 #   VD_DECORATIONS=0         # 1 -> drop --no-vd-system-decorations
 #   EXTRA_ARGS=              # appended verbatim to every scrcpy invocation
+#   DUO_OUTPUT=DP-2          # duo mode: output the two panes sit on
+#   DUO_GAP=40               # px between the panes
+#   DUO_ASPECT=9:16          # pane aspect (9:21 is closer to the phone's panel)
+#   DUO_PANEL=               # override the computed pane size, e.g. 800x1400
+#   DUO_USER=                # override the Secure Folder user id
+#
+# Duo mode mirrors two accounts at once: the normal install plus the copy inside
+# Samsung's Secure Folder, which is simply the same package under a second
+# Android user. Secure Folder must be UNLOCKED on the phone first, and Knox may
+# refuse to let adb launch into the container at all.
 #
 # USB is the low-latency transport. Wi-Fi adds jitter that shows up exactly
 # where it hurts — Pokémon GO ball throws — and drops the link when the phone
@@ -49,7 +60,7 @@
 
 set -uo pipefail
 
-CONF_KEYS='CONNECTION|CODEC|PANEL|DPI|FULLSCREEN|VD_DECORATIONS|EXTRA_ARGS|PHONE_IP|PHONE_PORT|PKG_POGO|PKG_TCGP|OUTPUT|AUDIO|AUDIO_BUFFER|AUDIO_OUTPUT_BUFFER|MAX_FPS|KEEP_ON_DISPLAY'
+CONF_KEYS='CONNECTION|CODEC|PANEL|DPI|FULLSCREEN|VD_DECORATIONS|EXTRA_ARGS|PHONE_IP|PHONE_PORT|PKG_POGO|PKG_TCGP|OUTPUT|AUDIO|AUDIO_BUFFER|AUDIO_OUTPUT_BUFFER|MAX_FPS|KEEP_ON_DISPLAY|DUO_OUTPUT|DUO_GAP|DUO_ASPECT|DUO_PANEL|DUO_USER'
 
 # Snapshot deliberate one-off overrides (CONNECTION=usb pokemirror pogo) BEFORE
 # the defaults below are assigned. Assigning to an already-exported name would
@@ -76,6 +87,11 @@ AUDIO_BUFFER=""        # ms; empty = 150 over Wi-Fi, 50 over USB
 AUDIO_OUTPUT_BUFFER="" # ms; empty = 15 over Wi-Fi, scrcpy default (5) over USB
 MAX_FPS=60             # phone-side encode cap; drop to 30 if the phone throttles
 KEEP_ON_DISPLAY=1      # move the app back if it restarts onto the phone's screen
+DUO_OUTPUT="DP-2"      # duo mode: which output the two panes sit on
+DUO_GAP=40             # px between the two panes
+DUO_ASPECT="9:16"      # pane aspect; 9:21 is closer to the phone's own panel
+DUO_PANEL=""           # override the computed per-pane size, e.g. 800x1400
+DUO_USER=""            # override the Secure Folder user id (default: autodetect)
 
 # Resolved by pick_transport().
 TRANSPORT=""
@@ -400,6 +416,155 @@ keep_on_display_async() {
     ) >/dev/null &
 }
 
+# --- duo: two accounts side by side ----------------------------------------
+#
+# Samsung's Secure Folder is a separate Android user, so the second account's
+# copy of the game is the same package installed under a different user id.
+# scrcpy has no --user flag, so the second instance opens a bare virtual display
+# and the app is started onto it with `am start --user <id> --display <id>`.
+#
+# Audio is captured device-wide, so only the first instance forwards it — that
+# single stream already contains both games.
+
+sf_user() {
+    ash pm list users | awk -F'[{:]' '/Secure ?Folder/ {print $2; exit}'
+}
+
+# Prints: PANEL_W PANEL_H X1 Y1 X2 Y2 for two portrait panes on $1, gap $2.
+duo_geometry() {
+    kscreen-doctor -j 2>/dev/null | python3 -c '
+import json, sys
+name, gap, aspect = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+num, den = (int(v) for v in aspect.split(":"))
+for o in json.load(sys.stdin).get("outputs", []):
+    if o.get("name") == name and o.get("enabled"):
+        p, s = o["pos"], o["size"]
+        ow, oh = s["width"], s["height"]
+        h = oh - 40
+        w = (int(h * num / den) // 2) * 2
+        total = 2 * w + gap
+        if total > ow:                      # narrow output: shrink to fit
+            w = (ow - gap) // 2 // 2 * 2
+            h = (int(w * den / num) // 2) * 2
+            total = 2 * w + gap
+        x0 = p["x"] + (ow - total) // 2
+        y0 = p["y"] + (oh - h) // 2
+        print(w, h, x0, y0, x0 + w + gap, y0)
+        break
+' "$1" "$2" "$DUO_ASPECT"
+}
+
+duo_place() {
+    local title=$1 x=$2 y=$3 w=$4 h=$5 id
+    command -v kdotool >/dev/null 2>&1 || return 0
+    for _ in $(seq 1 20); do
+        id=$(kdotool search --name "$title" 2>/dev/null | head -1)
+        [ -n "$id" ] && break
+        sleep 1
+    done
+    [ -n "$id" ] || { warn "could not find the window titled '$title' to place it"; return 0; }
+    # Size before move: KWin can shove an oversized window back on-screen.
+    kdotool windowsize "$id" "$w" "$h" >/dev/null 2>&1
+    kdotool windowmove "$id" "$x" "$y" >/dev/null 2>&1
+}
+
+launch_duo() {
+    local profile=${1:-tcgp} pkg title comp sfu geom pw ph x1 y1 x2 y2
+    shift 2>/dev/null || true
+
+    pick_transport || exit 1
+
+    case "$profile" in
+        pogo) pkg=$(resolve_and_cache PKG_POGO "$PKG_POGO" "$PAT_POGO" "Pokémon GO") || exit 1
+              title="Pokémon GO" ;;
+        tcgp) pkg=$(resolve_and_cache PKG_TCGP "$PKG_TCGP" "$PAT_TCGP" "Pokémon TCG Pocket") || exit 1
+              title="Pokémon TCG Pocket" ;;
+        *)    die "unknown profile: $profile" ;;
+    esac
+
+    sfu=${DUO_USER:-$(sf_user)}
+    [ -n "$sfu" ] || die "no Secure Folder user found in 'adb shell pm list users' — unlock Secure Folder on the phone, or set DUO_USER=<id>"
+    if ! ash pm list packages --user "$sfu" "$pkg" | grep -q "$pkg"; then
+        die "$pkg is not installed for user $sfu (Secure Folder). Install it inside Secure Folder, and make sure the folder is unlocked."
+    fi
+    comp=$(ash cmd package resolve-activity --brief -c android.intent.category.LAUNCHER "$pkg" | tail -1)
+    case "$comp" in */*) ;; *) die "could not resolve a launch activity for $pkg" ;; esac
+
+    geom=$(duo_geometry "$DUO_OUTPUT" "$DUO_GAP")
+    [ -n "$geom" ] || die "output '$DUO_OUTPUT' not found — set DUO_OUTPUT to a connector from 'kscreen-doctor -o'"
+    read -r pw ph x1 y1 x2 y2 <<< "$geom"
+    [ -n "$DUO_PANEL" ] && { pw=${DUO_PANEL%x*}; ph=${DUO_PANEL#*x}; }
+
+    info "$title duo — ${TRANSPORT^^} — 2x ${pw}x${ph} @ ${DPI}dpi on $DUO_OUTPUT — user 0 + $sfu"
+
+    local common=(
+        -s "$ADB_SERIAL"
+        --video-codec="$CODEC"
+        --max-fps="$MAX_FPS"
+        --new-display="${pw}x${ph}/${DPI}"
+        --video-bit-rate="$([ "$TRANSPORT" = usb ] && echo 12M || echo 6M)"
+        --video-buffer=50
+    )
+    [ "$VD_DECORATIONS" = 1 ] || common+=(--no-vd-system-decorations)
+
+    local a_args=("${common[@]}" --window-title="$title — Main" --start-app="$pkg")
+    if [ "$AUDIO" = 1 ]; then
+        local abuf=$AUDIO_BUFFER obuf=$AUDIO_OUTPUT_BUFFER
+        [ -n "$abuf" ] || { [ "$TRANSPORT" = usb ] && abuf=50 || abuf=150; }
+        [ -n "$obuf" ] || { [ "$TRANSPORT" != usb ] && obuf=15; }
+        a_args+=(--audio-codec=opus --audio-buffer="$abuf")
+        [ -n "$obuf" ] && a_args+=(--audio-output-buffer="$obuf")
+    else
+        a_args+=(--no-audio)
+    fi
+    # Second instance never forwards audio: the first already captures the whole
+    # device mix, and two REMOTE_SUBMIX captures would fight over it.
+    local b_args=("${common[@]}" --window-title="$title — Secure Folder" --no-audio)
+
+    local loga logb pida pidb
+    loga=$(mktemp --tmpdir pokemirror-duo-a-XXXXXX)
+    logb=$(mktemp --tmpdir pokemirror-duo-b-XXXXXX)
+
+    scrcpy "${a_args[@]}" > >(tee "$loga") 2>&1 &
+    pida=$!
+    scrcpy "${b_args[@]}" > >(tee "$logb") 2>&1 &
+    pidb=$!
+
+    cleanup_duo() {
+        kill "$pida" "$pidb" 2>/dev/null
+        rm -f "$loga" "$logb"
+    }
+    trap cleanup_duo EXIT INT TERM
+
+    # Instance B has no --start-app, so its display stays empty (and encodes
+    # nothing) until the Secure Folder copy is started onto it by id.
+    local didb=""
+    for _ in $(seq 1 30); do
+        sleep 1
+        didb=$(grep -o 'New display: [^(]*(id=[0-9]*)' "$logb" 2>/dev/null \
+               | tail -1 | grep -o '[0-9]*)' | tr -d ')')
+        [ -n "$didb" ] && break
+    done
+    if [ -n "$didb" ]; then
+        info "starting the Secure Folder copy on display $didb as user $sfu"
+        ash am start --user "$sfu" --display "$didb" -n "$comp" >/dev/null \
+            || warn "am start failed for user $sfu — Knox may be blocking adb from launching Secure Folder apps"
+    else
+        warn "never saw a virtual display id for the second instance"
+    fi
+
+    duo_place "$title — Main" "$x1" "$y1" "$pw" "$ph" &
+    duo_place "$title — Secure Folder" "$x2" "$y2" "$pw" "$ph" &
+
+    # Whichever window is closed first takes the other with it.
+    wait -n "$pida" "$pidb" 2>/dev/null
+    info "one instance exited — closing the other"
+    cleanup_duo
+    trap - EXIT INT TERM
+    wait 2>/dev/null
+    return 0
+}
+
 # --- profiles --------------------------------------------------------------
 
 launch() {
@@ -716,7 +881,7 @@ cmd_config() {
     [ -f "$CONF" ] && cat "$CONF" || echo "(does not exist yet — run: pokemirror setup)"
 }
 
-usage() { sed -n '2,42p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,59p' "$0" | sed 's/^# \{0,1\}//'; }
 
 main() {
     need adb android-tools
@@ -726,6 +891,7 @@ main() {
         pair)           shift; cmd_pair "$@" ;;
         setup)          cmd_setup ;;
         pogo|tcgp)      launch "$@" ;;
+        duo)            shift; launch_duo "$@" ;;
         connect)        connect ;;
         status|"")      cmd_status ;;
         apps)           cmd_apps ;;

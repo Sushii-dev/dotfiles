@@ -58,3 +58,4 @@ sway (Sushitop only — nested 16:9 co-op screen for Quetzal streaming)
 scrcpy
 android-tools (adb)
 android-udev (adb USB device rules; user added to adbusers group)
+kdotool (AUR — pokemirror duo: places the two panes side by side on KDE)
