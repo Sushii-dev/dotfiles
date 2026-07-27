@@ -19,7 +19,10 @@ OVERRIDES = {
         "smallestReadableFont": "JetBrainsMono Nerd Font,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,Regular",
         "toolBarFont": "JetBrainsMono Nerd Font,11,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,Regular",
         "menuFont": "JetBrainsMono Nerd Font,11,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,Regular",
-        "XCursorSize": "32",
+        # XCursorSize is deliberately NOT forced. Pinning it here fought the
+        # System Settings cursor-size slider (and lost to XCURSOR_SIZE in
+        # ~/.config/environment.d/cursor.conf anyway). Cursor size is now local
+        # per-machine state owned by KDE -- it depends on the physical display.
         # Wallpaper colours come from matugen -> DankMatugen scheme (wallpaper-set).
         # Disable KDE's native accent-from-wallpaper so the two don't race.
         "accentColorFromWallpaper": "false",

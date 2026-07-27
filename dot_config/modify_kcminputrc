@@ -20,10 +20,15 @@ import sys
 # 1:1 accel and becomes unusable.
 #
 # PointerAccelerationProfile: 0 = none, 1 = flat, 2 = adaptive.
+# NOTE: cursorSize is deliberately NOT forced here. It used to be pinned to 32,
+# which meant the System Settings cursor-size slider silently reverted on the next
+# `chezmoi apply`. Cursor size depends on the physical display you are sitting in
+# front of, so per the no-hardware-config-without-templating rule it is now local
+# per-machine state owned by KDE. Set it in
+# System Settings > Appearance > Cursors > Size.
+# Posy_Cursor_Black only ships native bitmaps at 32/48/64/96/128 -- any other
+# value is scaled and looks soft.
 OVERRIDES = {
-    "[Mouse]": {
-        "cursorSize": "32",
-    },
     "[Libinput][Defaults][Pointer]": {
         "PointerAcceleration": "0",
         "PointerAccelerationProfile": "1",
