@@ -30,7 +30,7 @@ TERMINAL_DESKTOP="kitty-shortcut.desktop"   # .desktop file id of your terminal 
                                             # e.g. "kitty.desktop", "com.mitchellh.ghostty.desktop"
 DESKTOP_COUNT=9                             # number of workspaces
 GAP=10                                      # inner + outer gap in px (DMS-ish)
-GAP_TOP=54                                  # top gap: 8px float margin + 36px panel + 10px gap.
+GAP_TOP=64                                  # top gap: ~4px float margin + 50px panel + 10px gap.
                                             # Panel is "windows go below" (panelVisibility=3 in
                                             # plasmashellrc) so it never de-floats; this gap is
                                             # what keeps tiles out from under it.
@@ -335,7 +335,25 @@ if [ -f /usr/lib/qt6/plugins/kwin/effects/plugins/forceblur.so ] || \
     # (alternate detail rows otherwise paint OPAQUE stripes over the glass).
     # A KWin opacity rule does NOT work: Better Blur DX only blurs windows
     # with a real alpha channel, not rule-induced transparency.
-    for RID in "$FROST_ID"; do
+    # Inactive-window dim. Replaces the `diminactive` KWin EFFECT, which is
+    # disabled in modify_kwinrc: diminactive's isActive() is hardcoded true and it
+    # never overrides Effect::blocksDirectScanout() (default true), so on KWin 6.7.x
+    # it permanently knocks the cursor off the DRM cursor plane -- every pointer
+    # motion becomes a full composite instead of an async plane flip (~4-10 ms).
+    # A window RULE is not an Effect, so it can never appear in activeEffects and
+    # can never block scanout.
+    # MUST be appended LAST in [General] rules=: KWin's CHECK_FORCE_RULE stops at
+    # the FIRST matching force rule, so kde-dank-frost-terminal (80) and the
+    # quetzal-* opt-outs (100) only keep working if they come before this one.
+    DIM_ID="kde-dank-dim-inactive"
+    c "$KRULES" "$DIM_ID" Description "kde-dank: inactive dim (diminactive replacement)"
+    c "$KRULES" "$DIM_ID" opacityinactive 92
+    c "$KRULES" "$DIM_ID" opacityinactiverule 2
+    c "$KRULES" "$DIM_ID" wmclass ".*"
+    c "$KRULES" "$DIM_ID" wmclassmatch 3
+    c "$KRULES" "$DIM_ID" types 1
+
+    for RID in "$FROST_ID" "$DIM_ID"; do
         EXISTING_RULES=$(kreadconfig6 --file "$KRULES" --group General --key rules 2>/dev/null || true)
         if [[ ",$EXISTING_RULES," != *",$RID,"* ]]; then
             if [ -n "$EXISTING_RULES" ]; then

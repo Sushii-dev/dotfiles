@@ -5,6 +5,14 @@ import sys
 OVERRIDES = {
     "Plugins": {
         "shakecursorEnabled": "false",
+        # diminactive's isActive() is hardcoded true and it does not override
+        # Effect::blocksDirectScanout() (which defaults to true), so on KWin 6.7.x
+        # it permanently pushes the cursor off the DRM cursor plane -- every pointer
+        # motion becomes a full composite instead of an async plane flip (~4-10 ms).
+        # better_blur_dx and ShapeCorners both override it to false, so they are fine.
+        # Inactive-window dimming is replaced by an opacityinactive window rule
+        # (window rules are not Effects, so they never block scanout).
+        "diminactiveEnabled": "false",
         # niri-parity KWin scripts (live in ~/.local/share/kwin/scripts/, tracked here)
         "krohnkiteEnabled": "true",
         "dynamic-desktopsEnabled": "true",
